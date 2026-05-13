@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/
+frontend/node_modules/
+frontend/dist/
+node_modules/
+dist/
+*.log
+.DS_Store
+*.egg-info/
+.pytest_cache/
+htmlcov/
+.coverage
