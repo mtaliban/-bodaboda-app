@@ -284,3 +284,5 @@ curl -s -X POST http://localhost:8001/auth/logout \
 ```
 
 For drivers, `driver_profile_id` is included instead of `rider_profile_id`.
+
+# CD Pipeline trigger
