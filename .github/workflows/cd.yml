@@ -43,11 +43,17 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "$EC2_KEY" > ~/.ssh/ec2_key
+          echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
-          ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null
-        env:
-          EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
+          ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null && echo "Key valid"
+
+      - name: Test SSH connection
+        run: |
+          ssh -i ~/.ssh/ec2_key \
+            -o StrictHostKeyChecking=no \
+            -o IdentitiesOnly=yes \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "echo SSH_OK && whoami"
 
       - name: Deploy to staging
         run: |
@@ -78,11 +84,17 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "$EC2_KEY" > ~/.ssh/ec2_key
+          echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
-          ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null
-        env:
-          EC2_KEY: ${{ secrets.EC2_SSH_KEY }}
+          ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null && echo "Key valid"
+
+      - name: Test SSH connection
+        run: |
+          ssh -i ~/.ssh/ec2_key \
+            -o StrictHostKeyChecking=no \
+            -o IdentitiesOnly=yes \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "echo SSH_OK && whoami"
 
       - name: Deploy to production
         run: |
