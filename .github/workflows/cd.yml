@@ -40,27 +40,28 @@ jobs:
     environment: staging
 
     steps:
-      - name: Deploy to staging on EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            docker pull mtalibani/bodaboda-backend:latest
-            docker stop bodaboda-staging || true
-            docker rm bodaboda-staging || true
-            docker run -d --name bodaboda-staging \
-              -p 8101:8001 \
-              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              -e JWT_SECRET="staging-secret" \
-              -e ACCESS_TOKEN_EXPIRE_MINUTES=30 \
-              -e REFRESH_TOKEN_EXPIRE_DAYS=7 \
-              mtalibani/bodaboda-backend:latest
-            sleep 5
-            docker ps | grep bodaboda-staging
-            curl -f http://localhost:8101/health || echo "Health check failed"
-            echo "Staging running at http://3.85.53.81:8101"
+      - name: Deploy to staging
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh -i /tmp/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "docker pull mtalibani/bodaboda-backend:latest && \
+             docker stop bodaboda-staging || true && \
+             docker rm bodaboda-staging || true && \
+             docker run -d --name bodaboda-staging \
+               -p 8101:8001 \
+               -e DATABASE_URL='postgresql+asyncpg://postgres:password@localhost:5432/bodaboda' \
+               -e JWT_SECRET='staging-secret' \
+               -e ACCESS_TOKEN_EXPIRE_MINUTES=30 \
+               -e REFRESH_TOKEN_EXPIRE_DAYS=7 \
+               mtalibani/bodaboda-backend:latest && \
+             sleep 5 && \
+             docker ps | grep bodaboda-staging && \
+             curl -f http://localhost:8101/health || echo 'Health check failed'"
+          rm -f /tmp/deploy_key
 
   deploy-production:
     needs: deploy-staging
@@ -68,24 +69,25 @@ jobs:
     environment: production
 
     steps:
-      - name: Deploy to production on EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            docker pull mtalibani/bodaboda-backend:latest
-            docker stop bodaboda-production || true
-            docker rm bodaboda-production || true
-            docker run -d --name bodaboda-production \
-              -p 8001:8001 \
-              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              -e JWT_SECRET="production-secret" \
-              -e ACCESS_TOKEN_EXPIRE_MINUTES=30 \
-              -e REFRESH_TOKEN_EXPIRE_DAYS=7 \
-              mtalibani/bodaboda-backend:latest
-            sleep 5
-            docker ps | grep bodaboda-production
-            curl -f http://localhost:8001/health || echo "Health check failed"
-            echo "Production running at http://3.85.53.81:8001"
+      - name: Deploy to production
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh -i /tmp/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+            "docker pull mtalibani/bodaboda-backend:latest && \
+             docker stop bodaboda-production || true && \
+             docker rm bodaboda-production || true && \
+             docker run -d --name bodaboda-production \
+               -p 8001:8001 \
+               -e DATABASE_URL='postgresql+asyncpg://postgres:password@localhost:5432/bodaboda' \
+               -e JWT_SECRET='production-secret' \
+               -e ACCESS_TOKEN_EXPIRE_MINUTES=30 \
+               -e REFRESH_TOKEN_EXPIRE_DAYS=7 \
+               mtalibani/bodaboda-backend:latest && \
+             sleep 5 && \
+             docker ps | grep bodaboda-production && \
+             curl -f http://localhost:8001/health || echo 'Health check failed'"
+          rm -f /tmp/deploy_key
