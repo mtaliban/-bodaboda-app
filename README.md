@@ -288,3 +288,4 @@ For drivers, `driver_profile_id` is included instead of `rider_profile_id`.
 # CD Pipeline trigger
 trigger
 retrigger Thu May 14 04:30:02 AM EAT 2026
+fix EC2_USER secret
