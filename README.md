@@ -1,13 +1,13 @@
-# Bodaboda Fullstack CI/CD Assignment
+# Bodaboda Fullstack CI/CD + MQTT Assignment
 
-This is a Dockerized Bodaboda fullstack application prepared for a Software Deployment CI/CD assignment. It contains a FastAPI backend, Vite/React frontend, PostgreSQL database, automated tests, and monitoring tools.
+This is a Dockerized Bodaboda fullstack application prepared for a Software Deployment CI/CD and MQTT Real-Time Communication assignment. It contains two FastAPI backends, a Vite/React frontend, PostgreSQL database, MQTT broker (Mosquitto), automated tests, and monitoring tools.
 
 ---
 
-## Assignment Task 1 Evidence
+## Assignment Task 1 — CI/CD Evidence
 
 | Requirement | Status |
-|---|---|
+|-------------|--------|
 | Code pushed to GitHub | ✅ https://github.com/mtaliban/-bodaboda-app |
 | `app/` directory exists | ✅ FastAPI backend source code |
 | `tests/` directory exists | ✅ pytest test cases |
@@ -18,13 +18,65 @@ This is a Dockerized Bodaboda fullstack application prepared for a Software Depl
 
 ---
 
-## Assignment-Required Structure
+## Assignment Task 2 — MQTT Integration Evidence
 
+| Requirement | Status |
+|-------------|--------|
+| MQTT broker running in Docker | ✅ Eclipse Mosquitto 2.0 (ports 1883, 9001) |
+| Option B: Driver Location Updates | ✅ Driver publishes GPS → Rider sees live on map |
+| Option A: Ride Request Broadcasting | ✅ Backend publishes → Driver receives via `driver/{id}/offers` |
+| Option C: Ride Status Updates | ✅ Status events via `rides/{id}/events` |
+| Chat over MQTT | ✅ Rider ↔ Driver real-time chat via `rides/{id}/chat` |
+| MQTT test in CI pipeline | ✅ Mosquitto starts + publish/receive test on every push |
+| MQTT in CD pipeline | ✅ Mosquitto deployed with full stack on EC2 |
+| Client simulation script | ✅ `scripts/driver_subscriber.py` |
+
+---
+
+## MQTT Integration
+
+### Feature Implemented
+All three options implemented:
+- **Option A** — Ride Request Broadcasting
+- **Option B** — Driver Location Updates (real GPS via browser geolocation)
+- **Option C** — Ride Status Updates
+
+### Topics Used
+
+| Topic | Publisher | Subscriber | Description |
+|-------|-----------|------------|-------------|
+| `driver/{id}/location` | Driver app | Rider app | Real-time GPS — rider sees boda moving on map |
+| `rides/{id}/chat` | Rider / Driver | Both | Real-time chat between rider and driver |
+| `rides/{id}/events` | Backend | Rider app | Trip status changes (ASSIGNED, IN_PROGRESS, etc.) |
+| `driver/{id}/offers` | Backend | Driver app | New ride requests sent to available drivers |
+
+### Message Format (JSON)
+
+```json
+{
+  "event_id": "loc_1717123456789",
+  "event_type": "DRIVER_LOCATION",
+  "timestamp": "2026-05-31T10:00:00Z",
+  "version": "1.0",
+  "payload": {
+    "lat": -6.1711,
+    "lng": 35.7402
+  }
+}
 ```
-auth_user_service/
-├── app/                  ← required
-├── tests/                ← required
-└── Dockerfile            ← required
+
+### How It Works
+
+1. **Driver** opens the app → browser requests GPS permission
+2. Every time driver moves more than 8 metres, location is published to `driver/{id}/location`
+3. **Rider** is subscribed to that topic → the boda 🏍️ marker moves on the map in real time
+4. If no real GPS arrives, map shows a simulation (marked as "● simulation")
+5. As soon as real GPS arrives, simulation stops automatically
+
+### Simulation Script
+
+```bash
+python scripts/driver_subscriber.py --driver-id 1
 ```
 
 ---
@@ -33,29 +85,36 @@ auth_user_service/
 
 ```
 auth_user_service/
-├── app/                  # FastAPI backend source code
-├── tests/                # pytest test cases
-├── frontend/             # Vite/React frontend application
-├── Dockerfile            # Backend Docker image definition
-├── docker-compose.yml    # Runs backend, frontend, database, and monitoring stack
-├── requirements.txt      # Python backend dependencies
-├── alembic/              # Database migrations
-├── grafana/              # Grafana provisioning/configuration
-├── prometheus/           # Prometheus configuration
-├── metricbeat.yml        # Metricbeat configuration
-├── .gitignore
+├── app/                      # Auth/User FastAPI backend (port 8001)
+├── driver_service/           # Driver FastAPI backend (port 8002)
+│   ├── app/
+│   │   ├── routers/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   └── services/
+│   │       ├── mqtt_publisher.py
+│   │       └── mqtt_subscriber.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── tests/                    # pytest test cases
+├── frontend/                 # Vite/React frontend (port 5173)
+├── mosquitto/
+│   └── config/
+│       └── mosquitto.conf    # MQTT broker config (TCP 1883 + WS 9001)
+├── scripts/
+│   └── driver_subscriber.py  # MQTT simulation/demo script
+├── Dockerfile                # Auth backend Docker image
+├── docker-compose.yml        # Runs all services with one command
+├── requirements.txt          # Python backend dependencies
+├── alembic/                  # Database migrations
+├── grafana/                  # Grafana provisioning
+├── prometheus/               # Prometheus configuration
+├── metricbeat.yml            # Metricbeat configuration
+├── .github/workflows/
+│   ├── ci.yml                # CI: tests + MQTT test + Docker build
+│   └── cd.yml                # CD: deploy full stack to EC2
 └── README.md
 ```
-
-### Folder Descriptions
-
-| Folder/File | Description |
-|---|---|
-| `app/` | FastAPI backend source code only — routers, models, schemas, services, core config |
-| `tests/` | Automated pytest test cases, completely separate from app code |
-| `Dockerfile` | Builds the backend Docker image |
-| `frontend/` | Vite/React UI — pages, components, API client |
-| `docker-compose.yml` | Runs all services together with a single command |
 
 ---
 
@@ -64,9 +123,11 @@ auth_user_service/
 `docker compose up --build -d` starts all of these:
 
 | Service | URL | Description |
-|---|---|---|
-| Backend (FastAPI) | http://localhost:8001 | Auth/User API |
+|---------|-----|-------------|
+| Auth Backend (FastAPI) | http://localhost:8001 | Auth/User API |
+| Driver Backend (FastAPI) | http://localhost:8002 | Driver/Trip/Offer API |
 | Frontend (React) | http://localhost:5173 | Vite/React UI |
+| Mosquitto (MQTT) | localhost:1883 / ws:9001 | MQTT broker |
 | PostgreSQL | localhost:5432 | Main database |
 | Grafana | http://localhost:3000 | Metrics dashboards |
 | Prometheus | http://localhost:9090 | Metrics scraping |
@@ -74,7 +135,28 @@ auth_user_service/
 | Elasticsearch | http://localhost:9200 | Log storage |
 | cAdvisor | http://localhost:8080 | Container resource usage |
 | Node Exporter | http://localhost:9100 | Host system metrics |
-| Metricbeat | — | Collects Docker/host CPU, memory, network metrics |
+
+---
+
+## CI/CD Pipeline
+
+### CI (`ci.yml`) — runs on every push to `main`
+
+1. Start PostgreSQL service
+2. Start Mosquitto MQTT broker (using repo mosquitto config)
+3. Install Python dependencies
+4. Run backend tests (`pytest`)
+5. **MQTT test** — publish a message to `rides/test/events` → verify it is received
+6. Build all Docker images (`docker compose build`)
+
+### CD (`cd.yml`) — runs automatically after CI passes
+
+1. SSH into EC2 production server
+2. `git pull` latest code
+3. `docker compose down` old containers
+4. `docker compose build` with EC2 public IP set for frontend
+5. `docker compose up -d` — starts ALL services including MQTT broker
+6. Verify MQTT broker is responding
 
 ---
 
@@ -94,10 +176,10 @@ docker compose ps
 ## How to Access the App
 
 | Service | URL |
-|---|---|
+|---------|-----|
 | Frontend | http://localhost:5173 |
-| Backend API Docs (Swagger) | http://localhost:8001/docs |
-| Backend API Docs (ReDoc) | http://localhost:8001/redoc |
+| Auth API Docs (Swagger) | http://localhost:8001/docs |
+| Driver API Docs (Swagger) | http://localhost:8002/docs |
 | Health check | http://localhost:8001/health |
 | Grafana | http://localhost:3000 |
 | Prometheus | http://localhost:9090 |
@@ -111,10 +193,8 @@ docker compose ps
 python3 -m pytest tests/ -v
 ```
 
-Current test cases:
-
 | Test | What it checks |
-|---|---|
+|------|----------------|
 | `test_health_returns_200` | `GET /health` returns HTTP 200 and `{"status": "ok"}` |
 | `test_login_endpoint_exists` | `POST /auth/login` exists and does not return 404 |
 
@@ -127,18 +207,6 @@ tests/test_health.py::test_login_endpoint_exists[asyncio] PASSED
 
 ---
 
-## Next CI/CD Steps
-
-- [ ] Create `.github/workflows/ci.yml`
-- [ ] Run tests automatically on every push
-- [ ] Build Docker image automatically on push
-- [ ] Push Docker image to a container registry (Docker Hub / GHCR)
-- [ ] Deploy to staging environment automatically
-- [ ] Add manual approval gate before production deploy
-- [ ] Deploy to production
-
----
-
 ## Backend Stack
 
 - FastAPI + Uvicorn
@@ -147,34 +215,20 @@ tests/test_health.py::test_login_endpoint_exists[asyncio] PASSED
 - Alembic migrations
 - JWT (access + refresh tokens) via python-jose
 - bcrypt password hashing via passlib
+- aiomqtt for MQTT publish/subscribe
 
 ---
 
 ## Environment Variables
 
 | Variable | Required | Description |
-|---|---|---|
+|----------|----------|-------------|
 | `DATABASE_URL` | Yes | asyncpg connection string |
 | `JWT_SECRET` | Yes | Secret key for signing JWTs |
+| `MQTT_HOST` | No (default: mosquitto) | MQTT broker hostname |
+| `MQTT_PORT` | No (default: 1883) | MQTT broker port |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No (default: 30) | Access token lifetime |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | No (default: 7) | Refresh token lifetime |
-
----
-
-## Running Database Migrations
-
-**Inside Docker:**
-```bash
-docker compose exec auth_service alembic upgrade head
-```
-
-**Locally:**
-```bash
-cp .env.example .env   # edit DATABASE_URL to point to local postgres
-pip install -r requirements.txt
-alembic upgrade head
-uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
-```
 
 ---
 
@@ -220,72 +274,3 @@ curl -s -X POST http://localhost:8001/auth/login \
     "password": "123456"
   }' | jq
 ```
-
-Save the tokens:
-```bash
-TOKEN="<access_token from response>"
-REFRESH="<refresh_token from response>"
-```
-
-### Get Current User
-```bash
-curl -s http://localhost:8001/auth/me \
-  -H "Authorization: Bearer $TOKEN" | jq
-```
-
-### Update User Info
-```bash
-curl -s -X PUT http://localhost:8001/auth/me \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "full_name": "Hassan Updated",
-    "profile_image_url": "https://example.com/pic.jpg"
-  }' | jq
-```
-
-### Update Driver Profile
-```bash
-curl -s -X PUT http://localhost:8001/auth/me/profile \
-  -H "Authorization: Bearer $DRIVER_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "license_number": "DRV-999",
-    "vehicle_model": "Toyota Noah",
-    "plate_number": "T456DEF"
-  }' | jq
-```
-
-### Refresh Access Token
-```bash
-curl -s -X POST http://localhost:8001/auth/refresh \
-  -H "Content-Type: application/json" \
-  -d "{\"refresh_token\": \"$REFRESH\"}" | jq
-```
-
-### Logout
-```bash
-curl -s -X POST http://localhost:8001/auth/logout \
-  -H "Content-Type: application/json" \
-  -d "{\"refresh_token\": \"$REFRESH\"}" | jq
-```
-
----
-
-## JWT Payload Structure
-
-```json
-{
-  "sub": "1",
-  "role": "RIDER",
-  "rider_profile_id": 1,
-  "exp": 1234567890
-}
-```
-
-For drivers, `driver_profile_id` is included instead of `rider_profile_id`.
-
-# CD Pipeline trigger
-trigger
-retrigger Thu May 14 04:30:02 AM EAT 2026
-fix EC2_USER secret
