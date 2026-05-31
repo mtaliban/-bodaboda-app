@@ -6,10 +6,48 @@ on:
     types: [completed]
 
 jobs:
-  deploy-production:
+  build-and-push:
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push auth_service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/bodaboda-auth:latest
+
+      - name: Build and push driver_service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./driver_service
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/bodaboda-driver:latest
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/bodaboda-frontend:latest
+          build-args: |
+            VITE_API_BASE_URL=http://${{ secrets.EC2_HOST }}:8001
+            VITE_DRIVER_SERVICE_URL=http://${{ secrets.EC2_HOST }}:8002
+
+  deploy-production:
+    needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
@@ -20,15 +58,7 @@ jobs:
           chmod 600 ~/.ssh/ec2_key
           ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null && echo "SSH key valid ✅"
 
-      - name: Test SSH connection
-        run: |
-          ssh -i ~/.ssh/ec2_key \
-            -o StrictHostKeyChecking=no \
-            -o IdentitiesOnly=yes \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "echo SSH_OK && whoami"
-
-      - name: Deploy full stack to production
+      - name: Deploy to production
         run: |
           ssh -i ~/.ssh/ec2_key \
             -o StrictHostKeyChecking=no \
@@ -47,21 +77,20 @@ jobs:
               cd /opt/bodaboda
             fi
 
-            echo "=== Setting environment ==="
-            export VITE_API_BASE_URL=http://${{ secrets.EC2_HOST }}:8001
-            export VITE_DRIVER_SERVICE_URL=http://${{ secrets.EC2_HOST }}:8002
-
             echo "=== Stopping old containers ==="
             docker stop $(docker ps -q) 2>/dev/null || true
             docker rm $(docker ps -aq) 2>/dev/null || true
-            docker compose down --remove-orphans 2>/dev/null || true
 
-            echo "=== Building and starting all services ==="
-            docker compose build
-            docker compose up -d
+            echo "=== Pulling latest images ==="
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/bodaboda-auth:latest
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/bodaboda-driver:latest
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/bodaboda-frontend:latest
 
-            echo "=== Waiting for services to start ==="
-            sleep 15
+            echo "=== Starting services ==="
+            DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }} docker compose up -d
+
+            echo "=== Waiting for services ==="
+            sleep 10
 
             echo "=== Running services ==="
             docker compose ps
@@ -77,5 +106,4 @@ jobs:
             echo "   Frontend  : http://${{ secrets.EC2_HOST }}:5173"
             echo "   Auth API  : http://${{ secrets.EC2_HOST }}:8001"
             echo "   Driver API: http://${{ secrets.EC2_HOST }}:8002"
-            echo "   Mosquitto : ${{ secrets.EC2_HOST }}:1883"
           ENDSSH

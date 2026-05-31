@@ -32,9 +32,7 @@ services:
     restart: unless-stopped
 
   driver_service:
-    build:
-      context: ./driver_service
-      dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME}/bodaboda-driver:latest
     container_name: driver_service
     ports:
       - "8002:8002"
@@ -53,7 +51,7 @@ services:
     restart: unless-stopped
 
   auth_service:
-    build: .
+    image: ${DOCKERHUB_USERNAME}/bodaboda-auth:latest
     ports:
       - "8001:8001"
     environment:
@@ -76,13 +74,7 @@ services:
       - app_net
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8001}
-        VITE_DRIVER_SERVICE_URL: ${VITE_DRIVER_SERVICE_URL:-http://localhost:8002}
-        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+    image: ${DOCKERHUB_USERNAME}/bodaboda-frontend:latest
     ports:
       - "5173:80"
     depends_on:
