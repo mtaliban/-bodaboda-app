@@ -52,7 +52,9 @@ jobs:
             export VITE_DRIVER_SERVICE_URL=http://${{ secrets.EC2_HOST }}:8002
 
             echo "=== Stopping old containers ==="
-            docker compose down --remove-orphans || true
+            docker stop $(docker ps -q) 2>/dev/null || true
+            docker rm $(docker ps -aq) 2>/dev/null || true
+            docker compose down --remove-orphans 2>/dev/null || true
 
             echo "=== Building and starting all services ==="
             docker compose build
