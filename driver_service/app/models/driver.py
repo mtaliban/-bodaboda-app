@@ -1,0 +1,37 @@
+import enum
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Optional
+
+from sqlalchemy import BigInteger, ForeignKey, String, Enum as SAEnum, TIMESTAMP, DECIMAL, Integer, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.db import Base
+
+
+class DriverStatus(str, enum.Enum):
+    OFFLINE = "OFFLINE"
+    AVAILABLE = "AVAILABLE"
+    BUSY = "BUSY"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Driver(Base):
+    __tablename__ = "drivers"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=False)
+    driver_profile_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("driver_profiles.id"), unique=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    vehicle_model: Mapped[str] = mapped_column(String(100), nullable=False)
+    plate_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    verification_status: Mapped[str] = mapped_column(String(20), nullable=False, default="VERIFIED")
+    status: Mapped[DriverStatus] = mapped_column(SAEnum(DriverStatus, name="driverstatus"), nullable=False, default=DriverStatus.OFFLINE)
+    rating: Mapped[Decimal] = mapped_column(DECIMAL(3, 2), nullable=False, default=Decimal("5.00"))
+    total_trips: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    current_trip_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("trips.id"), nullable=True, default=None)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=_utcnow, nullable=False)

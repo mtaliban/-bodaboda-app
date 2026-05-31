@@ -1,14 +1,38 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { flushSync } from 'react-dom';
 import { AxiosError } from 'axios';
+import L from 'leaflet';
 import { useAuth } from '../context/AuthContext';
-import api from '../api/axios';
+import api, { driverApi } from '../api/axios';
+import { useMqtt, type MqttEvent } from '../hooks/useMqtt';
 import Alert from '../components/Alert';
+import RideMap, { type MapLocation } from '../components/RideMap';
 import { User, Trip, DriverOut, Offer, UserNotification, AcceptOfferResponse, DeclineOfferResponse } from '../types';
 
+// ── Helpers ────────────────────────────────────────────────────────────
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
+function fmtChatTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yest = new Date(now); yest.setDate(now.getDate() - 1);
+  const isYest = d.toDateString() === yest.toDateString();
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  if (isToday) return time;
+  if (isYest) return `Yesterday ${time}`;
+  return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${time}`;
+}
+
 type Tab =
-  | 'home' | 'profile' | 'edit-account' | 'edit-profile'
+  | 'home' | 'settings' | 'profile' | 'edit-account' | 'edit-profile'
   | 'request-ride' | 'my-trips'
   | 'current-offer' | 'offer-history'
   | 'notifications';
@@ -95,28 +119,424 @@ function TabLoader() {
   );
 }
 
+// ── Leaflet icons (shared) ────────────────────────────────────────────
+const bodaIcon = L.divIcon({ html: '🏍️', className: '', iconSize: [28, 28], iconAnchor: [14, 14] });
+const greenDot = L.divIcon({ html: '<div style="width:14px;height:14px;background:#10b981;border:2px solid #fff;border-radius:50%;box-shadow:0 0 4px #10b98180"></div>', className: '', iconSize: [14, 14], iconAnchor: [7, 7] });
+const redDot   = L.divIcon({ html: '<div style="width:14px;height:14px;background:#ef4444;border:2px solid #fff;border-radius:50%;box-shadow:0 0 4px #ef444480"></div>', className: '', iconSize: [14, 14], iconAnchor: [7, 7] });
+const youDot   = L.divIcon({ html: '<div style="width:16px;height:16px;background:#3b82f6;border:2.5px solid #fff;border-radius:50%;box-shadow:0 0 6px #3b82f680"></div>', className: '', iconSize: [16, 16], iconAnchor: [8, 8] });
+
+// ── Shared map helper ─────────────────────────────────────────────────
+function initTileMap(el: HTMLDivElement, center: [number, number], zoom = 14): L.Map {
+  const map = L.map(el, { center, zoom, zoomControl: false, attributionControl: false });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+  return map;
+}
+
+// ── Trip Live Map — RIDER sees boda coming ────────────────────────────
+function TripLiveMap({ trip, driverId, onPos, trackingMode }: {
+  trip: Trip;
+  driverId: number | null;
+  onPos?: (p: {lat:number;lng:number}|null) => void;
+  trackingMode?: boolean;
+}) {
+  const mapRef        = useRef<HTMLDivElement>(null);
+  const mapObjRef     = useRef<L.Map | null>(null);
+  const markerRef     = useRef<L.Marker | null>(null);
+  const routeLineRef  = useRef<L.Polyline | null>(null);
+  const simRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [realPos, setRealPos]   = useState<{ lat: number; lng: number } | null>(null);
+  const [simPos,  setSimPos]    = useState<{ lat: number; lng: number } | null>(null);
+
+  const pLat = trip.pickup_lat, pLng = trip.pickup_lng;
+  const dLat = trip.destination_lat, dLng = trip.destination_lng;
+
+  // Subscribe to real driver location via MQTT
+  const locTopics = driverId ? [`driver/${driverId}/location`] : [];
+  useMqtt(locTopics, useCallback((event: MqttEvent) => {
+    if (event.event_type === 'DRIVER_LOCATION') {
+      const p = event.payload as Record<string, unknown>;
+      setRealPos({ lat: Number(p.lat), lng: Number(p.lng) });
+    }
+  }, []));
+
+  // Start simulation when driver ID known but no real GPS yet
+  useEffect(() => {
+    if (!driverId || !pLat || !pLng || realPos) return;
+    const angle = Math.random() * 2 * Math.PI;
+    const offset = 0.02;
+    let cur = { lat: pLat + offset * Math.sin(angle), lng: pLng + offset * Math.cos(angle) };
+    setSimPos(cur);
+    simRef.current = setInterval(() => {
+      cur = { lat: cur.lat + (pLat - cur.lat) * 0.06, lng: cur.lng + (pLng - cur.lng) * 0.06 };
+      setSimPos({ ...cur });
+      if (haversineKm(cur.lat, cur.lng, pLat, pLng) < 0.04) {
+        clearInterval(simRef.current!); simRef.current = null;
+      }
+    }, 2500);
+    return () => { if (simRef.current) { clearInterval(simRef.current); simRef.current = null; } };
+  }, [driverId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Stop simulation when real GPS arrives
+  useEffect(() => {
+    if (realPos && simRef.current) { clearInterval(simRef.current); simRef.current = null; setSimPos(null); }
+  }, [realPos]);
+
+  const effectivePos = realPos ?? simPos;
+
+  // Notify parent of position
+  useEffect(() => { onPos?.(effectivePos ?? null); }, [effectivePos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Init map
+  useEffect(() => {
+    if (!mapRef.current || mapObjRef.current || !pLat || !pLng) return;
+    const map = initTileMap(mapRef.current, [pLat, pLng]);
+    L.marker([pLat, pLng], { icon: greenDot }).addTo(map).bindPopup('📍 Pickup yako');
+    if (dLat && dLng) {
+      L.marker([dLat, dLng], { icon: redDot }).addTo(map).bindPopup('🏁 Destination');
+      map.fitBounds([[pLat, pLng], [dLat, dLng]], { padding: [50, 50] });
+    }
+    mapObjRef.current = map;
+    return () => { map.remove(); mapObjRef.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Move boda marker + draw route line to pickup
+  useEffect(() => {
+    const map = mapObjRef.current;
+    if (!map || !effectivePos || !pLat || !pLng) return;
+    if (markerRef.current) {
+      markerRef.current.setLatLng([effectivePos.lat, effectivePos.lng]);
+    } else {
+      markerRef.current = L.marker([effectivePos.lat, effectivePos.lng], { icon: bodaIcon }).addTo(map);
+    }
+    // Route line from driver → pickup
+    if (routeLineRef.current) {
+      routeLineRef.current.setLatLngs([[effectivePos.lat, effectivePos.lng], [pLat, pLng]]);
+    } else {
+      routeLineRef.current = L.polyline([[effectivePos.lat, effectivePos.lng], [pLat, pLng]], {
+        color: '#FF6B00', weight: 3, dashArray: '8 5', opacity: 0.85,
+      }).addTo(map);
+    }
+    if (trackingMode) {
+      map.fitBounds([[effectivePos.lat, effectivePos.lng], [pLat, pLng]], { padding: [60, 60], maxZoom: 16 });
+    } else if (!realPos) {
+      map.panTo([effectivePos.lat, effectivePos.lng], { animate: true, duration: 1 });
+    }
+  }, [effectivePos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!pLat || !pLng) return null;
+
+  const dist = effectivePos ? haversineKm(effectivePos.lat, effectivePos.lng, pLat, pLng) : null;
+  const eta  = dist ? Math.max(1, Math.round(dist / 25 * 60)) : null;
+
+  if (trackingMode) {
+    return <div ref={mapRef} className="tlm-tracking-canvas" />;
+  }
+
+  return (
+    <div className="trip-live-map-wrap">
+      <div ref={mapRef} className="trip-live-map" />
+      {dist !== null && eta !== null ? (
+        <div className="tlm-eta-row">
+          <span className="tlm-eta-item">🏍️ {dist < 1 ? `${Math.round(dist * 1000)} m` : `${dist.toFixed(1)} km`} away</span>
+          <span className="tlm-eta-item">⏱ ETA ~{eta} min</span>
+          {!realPos && <span className="tlm-eta-item tlm-sim">● simulation</span>}
+        </div>
+      ) : (
+        <div className="tlm-waiting">Inasubiri nafasi ya driver…</div>
+      )}
+    </div>
+  );
+}
+
+// ── Driver Live Map — DRIVER sees rider's pickup ───────────────────────
+function DriverLiveMap({ trip }: { trip: Trip }) {
+  const mapRef    = useRef<HTMLDivElement>(null);
+  const mapObjRef = useRef<L.Map | null>(null);
+  const myMarkerRef = useRef<L.Marker | null>(null);
+  const [myPos, setMyPos] = useState<{ lat: number; lng: number } | null>(null);
+
+  const pLat = trip.pickup_lat, pLng = trip.pickup_lng;
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      ({ coords }) => setMyPos({ lat: coords.latitude, lng: coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 3000 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current || mapObjRef.current || !pLat || !pLng) return;
+    const map = initTileMap(mapRef.current, [pLat, pLng]);
+    L.marker([pLat, pLng], { icon: greenDot }).addTo(map).bindPopup('📍 Pickup ya abiria');
+    mapObjRef.current = map;
+    return () => { map.remove(); mapObjRef.current = null; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const map = mapObjRef.current;
+    if (!map || !myPos) return;
+    if (myMarkerRef.current) {
+      myMarkerRef.current.setLatLng([myPos.lat, myPos.lng]);
+    } else {
+      myMarkerRef.current = L.marker([myPos.lat, myPos.lng], { icon: youDot }).addTo(map).bindPopup('Wewe');
+    }
+    if (pLat && pLng) map.fitBounds([[myPos.lat, myPos.lng], [pLat, pLng]], { padding: [30, 30], maxZoom: 16 });
+  }, [myPos]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!pLat || !pLng) return null;
+
+  const dist = myPos ? haversineKm(myPos.lat, myPos.lng, pLat, pLng) : null;
+  const eta  = dist ? Math.max(1, Math.round(dist / 25 * 60)) : null;
+
+  return (
+    <div className="trip-live-map-wrap">
+      <div ref={mapRef} className="trip-live-map" />
+      {dist !== null && eta !== null ? (
+        <div className="tlm-eta-row">
+          <span className="tlm-eta-item">📍 Pickup {dist < 1 ? `${Math.round(dist * 1000)} m` : `${dist.toFixed(1)} km`}</span>
+          <span className="tlm-eta-item">⏱ ~{eta} min</span>
+        </div>
+      ) : (
+        <div className="tlm-waiting">Inasubiri GPS yako… Ruhusu location kwenye browser</div>
+      )}
+    </div>
+  );
+}
+
+// ── 5-Step Tracking Progress Bar ─────────────────────────────────────
+const TRACK_STEPS = ['Received','Accepted','On the way','Arriving','Completed'];
+
+function getTrackIdx(status: string): number {
+  const m: Record<string,number> = {
+    SEARCHING_DRIVER: 0,
+    DRIVER_ASSIGNED:  2,
+    DRIVER_ARRIVED:   3,
+    IN_PROGRESS:      3,
+    COMPLETED:        4,
+    NO_DRIVER_AVAILABLE: 0,
+    CANCELLED: 0,
+  };
+  return m[status] ?? 0;
+}
+
+function TrackSteps({ status }: { status: string }) {
+  const activeIdx = getTrackIdx(status);
+  return (
+    <div className="track-steps">
+      {TRACK_STEPS.map((label, i) => (
+        <div key={label} className="track-step-group">
+          <div className="track-step">
+            <div className={`track-dot${i < activeIdx ? ' done' : i === activeIdx ? ' active' : ''}`} />
+            <span className={`track-label${i <= activeIdx ? ' lit' : ''}`}>{label}</span>
+          </div>
+          {i < TRACK_STEPS.length - 1 && (
+            <div className={`track-line${i < activeIdx ? ' done' : ''}`} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Trip Chat (MQTT — Rider ↔ Driver) ─────────────────────────────────
+interface ChatMsg { sender: string; senderName: string; message: string; time: string; }
+
+const chatKey = (id: number) => `boda_chat_${id}`;
+
+function loadChat(tripId: number): ChatMsg[] {
+  try { return JSON.parse(localStorage.getItem(chatKey(tripId)) ?? '[]'); } catch { return []; }
+}
+function saveChat(tripId: number, msgs: ChatMsg[]) {
+  try { localStorage.setItem(chatKey(tripId), JSON.stringify(msgs)); } catch {}
+}
+
+function TripChat({ tripId, myRole, myName }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; myName: string }) {
+  const [messages, setMessages] = useState<ChatMsg[]>(() => loadChat(tripId));
+  const [input, setInput]       = useState('');
+  const topic    = `rides/${tripId}/chat`;
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const { publish } = useMqtt([topic], useCallback((event: MqttEvent) => {
+    if (event.event_type === 'CHAT_MESSAGE') {
+      const p = event.payload as Record<string, unknown>;
+      const msg: ChatMsg = {
+        sender:     String(p.sender ?? ''),
+        senderName: String(p.sender_name ?? ''),
+        message:    String(p.message ?? ''),
+        time:       event.timestamp,
+      };
+      setMessages(prev => {
+        const updated = [...prev, msg];
+        saveChat(tripId, updated);
+        return updated;
+      });
+    }
+  }, [tripId]));
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  const send = () => {
+    const text = input.trim();
+    if (!text) return;
+    const now = new Date().toISOString();
+    const msg: ChatMsg = { sender: myRole, senderName: myName, message: text, time: now };
+    // Add locally immediately (own messages don't echo back from MQTT)
+    setMessages(prev => { const u = [...prev, msg]; saveChat(tripId, u); return u; });
+    publish(topic, {
+      event_id: crypto.randomUUID(), event_type: 'CHAT_MESSAGE',
+      timestamp: now, version: '1.0',
+      payload: { trip_id: tripId, sender: myRole, sender_name: myName, message: text },
+    });
+    setInput('');
+  };
+
+  return (
+    <div className="trip-chat">
+      <div className="tc-header">💬 Chat — {myRole === 'RIDER' ? 'Dereva' : 'Abiria'}</div>
+      <div className="tc-messages">
+        {messages.length === 0
+          ? <span className="tc-empty">Hakuna ujumbe bado. Sema hujambo! 👋</span>
+          : messages.map((m, i) => {
+              const isMine = m.sender === myRole;
+              const isFirst = i === 0 || messages[i - 1].sender !== m.sender;
+              return (
+                <div key={i} className={`tc-msg ${isMine ? 'tc-msg-mine' : 'tc-msg-theirs'}`}>
+                  {!isMine && isFirst && <span className="tc-msg-name">{m.senderName}</span>}
+                  <span className="tc-msg-bubble">
+                    {m.message}
+                    <span className="tc-msg-time">{fmtChatTime(m.time)}</span>
+                  </span>
+                </div>
+              );
+            })
+        }
+        <div ref={bottomRef} />
+      </div>
+      <div className="tc-input-row">
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && send()} placeholder="Andika ujumbe…" />
+        <button className="tc-send-btn" onClick={send} disabled={!input.trim()}>➤</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Chat History (read-only) ──────────────────────────────────────────
+// standalone=true: renders just the messages list (used inside overlay)
+function TripChatHistory({ tripId, myRole, standalone }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; standalone?: boolean }) {
+  const [msgs, setMsgs] = useState<ChatMsg[]>(() => loadChat(tripId));
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setMsgs(loadChat(tripId)); }, [tripId]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior }); }, [msgs]);
+
+  const msgList = msgs.length === 0
+    ? <div className="tch-empty">Hakuna ujumbe kwenye safari hii.</div>
+    : msgs.map((m, i) => {
+        const isMine = m.sender === myRole;
+        const isFirst = i === 0 || msgs[i - 1].sender !== m.sender;
+        return (
+          <div key={i} className={`tch-msg ${isMine ? 'tch-msg-mine' : 'tch-msg-theirs'}`}>
+            {!isMine && isFirst && <span className="tch-sender">{m.senderName}</span>}
+            <span className="tch-bubble">
+              {m.message}
+              <span className="tch-time">{fmtChatTime(m.time)}</span>
+            </span>
+          </div>
+        );
+      });
+
+  if (standalone) {
+    return <div className="tch-standalone">{msgList}<div ref={bottomRef} /></div>;
+  }
+
+  return null; // rendered via overlay from parent
+}
+
 // ── Current Trip Card (Driver) ─────────────────────────────────────────
+// 4-click flow: 1.Accept → 2.Anza Safari → 3.Nakaribia → 4.Nimemaliza
 
 interface CurrentTripCardProps {
   trip: Trip;
   actionLoading: string | null;
-  onAction: (action: 'driver-arrived' | 'start' | 'complete') => void;
+  onAction: (action: 'start' | 'complete') => void;
 }
 
-function CurrentTripCard({ trip, actionLoading, onAction }: CurrentTripCardProps) {
-  const guideText: Record<string, string> = {
-    DRIVER_ASSIGNED: 'Head to the pickup point to collect your rider.',
-    DRIVER_ARRIVED:  'You have arrived. Waiting for the rider to board.',
-    IN_PROGRESS:     'Trip is underway. Complete it when you reach the destination.',
+function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentTripCardProps & { driverName: string }) {
+  const [notifying, setNotifying]   = useState(false);
+  const [notifySent, setNotifySent] = useState(false);
+  const [chatOpen, setChatOpen]     = useState(false);
+  const prevLocRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  // Keep an MQTT connection alive while trip is active for location publishing
+  const isActive = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
+  const locTopics = isActive && trip.driver_id ? [`driver/${trip.driver_id}/location`] : [];
+  const { publish: publishLoc } = useMqtt(locTopics, useCallback(() => {}, []));
+
+  // Publish GPS via MQTT (real-time map on rider side) + REST (backend storage)
+  useEffect(() => {
+    const driverId = trip.driver_id;
+    if (!isActive || !navigator.geolocation || !driverId) return;
+
+    const send = (lat: number, lng: number) => {
+      // Only publish if driver actually moved more than ~8 m
+      const prev = prevLocRef.current;
+      if (prev && Math.abs(lat - prev.lat) < 0.00007 && Math.abs(lng - prev.lng) < 0.00007) return;
+      prevLocRef.current = { lat, lng };
+
+      // MQTT — rider's map updates instantly
+      publishLoc(`driver/${driverId}/location`, {
+        event_id:   `loc_${Date.now()}`,
+        event_type: 'DRIVER_LOCATION',
+        timestamp:  new Date().toISOString(),
+        version:    '1.0',
+        payload:    { lat, lng },
+      });
+
+      // REST — backend records the position
+      driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => send(coords.latitude, coords.longitude),
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+
+    const watchId = navigator.geolocation.watchPosition(
+      ({ coords }) => send(coords.latitude, coords.longitude),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [trip.id, trip.status, trip.driver_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reset notify badge when trip status changes (new stage)
+  useEffect(() => { setNotifySent(false); }, [trip.status]);
+
+  const sendNakaribia = async () => {
+    setNotifying(true);
+    try {
+      await driverApi.post(`/driver/trips/${trip.id}/approaching`);
+      setNotifySent(true);
+    } catch {}
+    setNotifying(false);
   };
 
   return (
     <div className="current-trip-card">
       <div className="ctc-head">
-        <span className="ctc-title">🏍️ Current Trip #{trip.id}</span>
+        <span className="ctc-title">🏍️ Trip #{trip.id}</span>
         <TripStatusBadge status={trip.status} />
       </div>
 
+      {/* Map — guide driver to pickup */}
+      {trip.status === 'DRIVER_ASSIGNED' && <DriverLiveMap trip={trip} />}
+
+      {/* Route */}
       <div className="trip-route" style={{ margin: '0.875rem 0' }}>
         <div className="trip-route-item">
           <span className="trip-route-dot dot-pickup" />
@@ -135,44 +555,43 @@ function CurrentTripCard({ trip, actionLoading, onAction }: CurrentTripCardProps
         </div>
       </div>
 
-      {guideText[trip.status] && (
-        <p className="ctc-guide">{guideText[trip.status]}</p>
-      )}
+      {/* Chat toggle row */}
+      <div className="ctc-chat-row">
+        <button
+          className={`ctc-chat-toggle${chatOpen ? ' active' : ''}`}
+          onClick={() => setChatOpen(o => !o)}
+        >
+          💬 Chat na Abiria {chatOpen ? '▲' : '▼'}
+        </button>
+      </div>
+      <div style={{ display: chatOpen ? undefined : 'none' }}>
+        <TripChat tripId={trip.id} myRole="DRIVER" myName={driverName} />
+      </div>
 
+      {/* ── Buttons: exactly what matches the current status ── */}
       <div className="ctc-actions">
-        {trip.status === 'DRIVER_ASSIGNED' && (
-          <button
-            className="btn btn-primary btn-block"
-            onClick={() => onAction('driver-arrived')}
-            disabled={!!actionLoading}
-          >
-            {actionLoading === 'driver-arrived'
-              ? <><span className="btn-spinner" /> Updating…</>
-              : "📍 I've Arrived at Pickup"}
+
+        {/* STEP 2 of 4: Anza Safari */}
+        {(trip.status === 'DRIVER_ASSIGNED' || trip.status === 'DRIVER_ARRIVED') && (
+          <button className="btn btn-primary btn-block" onClick={() => onAction('start')} disabled={!!actionLoading}>
+            {actionLoading === 'start' ? <><span className="btn-spinner" /> Inaanza…</> : '🚀 Anza Safari'}
           </button>
         )}
-        {trip.status === 'DRIVER_ARRIVED' && (
-          <button
-            className="btn btn-primary btn-block"
-            onClick={() => onAction('start')}
-            disabled={!!actionLoading}
-          >
-            {actionLoading === 'start'
-              ? <><span className="btn-spinner" /> Starting…</>
-              : '🚀 Start Trip'}
-          </button>
-        )}
+
+        {/* STEP 3 of 4: Nakaribia (notify rider) */}
         {trip.status === 'IN_PROGRESS' && (
-          <button
-            className="btn btn-navy btn-block"
-            onClick={() => onAction('complete')}
-            disabled={!!actionLoading}
-          >
-            {actionLoading === 'complete'
-              ? <><span className="btn-spinner" /> Completing…</>
-              : '✓ Complete Trip'}
+          <button className="btn btn-ghost btn-block" onClick={sendNakaribia} disabled={notifying || notifySent}>
+            {notifying ? <><span className="btn-spinner" /> Inatuma…</> : notifySent ? '✓ Rider amejulishwa' : '📡 Nakaribia'}
           </button>
         )}
+
+        {/* STEP 4 of 4: Nimemaliza */}
+        {trip.status === 'IN_PROGRESS' && (
+          <button className="btn btn-navy btn-block" onClick={() => onAction('complete')} disabled={!!actionLoading}>
+            {actionLoading === 'complete' ? <><span className="btn-spinner" /> Inakamilisha…</> : '✓ Nimemaliza'}
+          </button>
+        )}
+
       </div>
     </div>
   );
@@ -181,85 +600,82 @@ function CurrentTripCard({ trip, actionLoading, onAction }: CurrentTripCardProps
 // ── Driver Home Panel ──────────────────────────────────────────────────
 
 function DriverHomePanel() {
-  const [driver, setDriver]           = useState<DriverOut | null>(null);
-  const [loading, setLoading]         = useState(true);
-  const [toggling, setToggling]       = useState(false);
-  const [offer, setOffer]             = useState<Offer | null>(null);
-  const [currentTrip, setCurrentTrip] = useState<Trip | null>(null);
+  const [driver, setDriver]               = useState<DriverOut | null>(null);
+  const [loading, setLoading]             = useState(true);
+  const [toggling, setToggling]           = useState(false);
+  const [incomingTrip, setIncomingTrip]   = useState<Trip | null>(null);
+  const [currentTrip, setCurrentTrip]     = useState<Trip | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [msg, setMsg]       = useState('');
-  const [msgType, setMsgType] = useState<'success' | 'error'>('success');
-  const [error, setError]   = useState('');
+  const [msg, setMsg]                     = useState('');
+  const [msgType, setMsgType]             = useState<'success' | 'error'>('success');
+  const [error, setError]                 = useState('');
 
-  const loadCurrentTrip = useCallback(async () => {
-    try {
-      const { data } = await api.get<Trip | null>('/drivers/current-trip');
-      setCurrentTrip(data ?? null);
-    } catch {}
-  }, []);
+  // MQTT — listen for incoming ride requests from Driver Service
+  const mqttTopics = driver?.status === 'AVAILABLE'
+    ? ['drivers/available/rides']
+    : [];
+
+  useMqtt(mqttTopics, useCallback((event: MqttEvent) => {
+    if (event.event_type === 'RIDE_AVAILABLE') {
+      setIncomingTrip(event.payload as unknown as Trip);
+    }
+  }, []));
 
   const refreshDriver = useCallback(async (): Promise<DriverOut | null> => {
     try {
-      const { data } = await api.get<DriverOut>('/drivers/me');
+      const { data } = await driverApi.get<DriverOut>('/driver/me');
       setDriver(data);
       return data;
     } catch {}
     return null;
   }, []);
 
-  // Init: sync-me ensures driver record exists
+  // Init
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.post<DriverOut>('/drivers/sync-me');
+        // sync-me in service 1 ensures driver record exists
+        await api.post('/drivers/sync-me');
+        const { data } = await driverApi.get<DriverOut>('/driver/me');
         setDriver(data);
-        if (data.status === 'BUSY') await loadCurrentTrip();
+        if (data.status === 'BUSY') {
+          const trips = await driverApi.get<Trip[]>('/driver/trips/my');
+          const active = trips.data.find(t => ['DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS'].includes(t.status));
+          if (active) setCurrentTrip(active);
+        }
       } catch {
-        setError('Failed to load driver status. Please refresh.');
+        setError('Imeshindwa kupakia driver data. Refresh.');
       } finally {
         setLoading(false);
       }
     })();
-  }, [loadCurrentTrip]);
-
-  // Poll offers every 4 s when AVAILABLE
-  useEffect(() => {
-    if (driver?.status !== 'AVAILABLE') return;
-    const poll = async () => {
-      try {
-        const { data } = await api.get<Offer | null>('/drivers/offers/current');
-        setOffer(data ?? null);
-      } catch {}
-    };
-    poll();
-    const id = setInterval(poll, 4000);
-    return () => clearInterval(id);
-  }, [driver?.status]);
+  }, []);
 
   const toggle = async () => {
     if (!driver || driver.status === 'BUSY') return;
     setToggling(true); setError('');
     try {
-      const ep = driver.status === 'OFFLINE' ? '/drivers/go-online' : '/drivers/go-offline';
-      const { data } = await api.post<DriverOut>(ep);
+      const newStatus = driver.status === 'OFFLINE' ? 'AVAILABLE' : 'OFFLINE';
+      const { data } = await driverApi.post<DriverOut>('/driver/status', { status: newStatus });
       setDriver(data);
-      setOffer(null);
+      setIncomingTrip(null);
     } catch {
-      setError('Failed to update status. Please try again.');
+      setError('Imeshindwa kubadilisha status.');
     }
     setToggling(false);
   };
 
-  const acceptOffer = async () => {
-    if (!offer) return;
+  const acceptTrip = async () => {
+    if (!incomingTrip) return;
     setActionLoading('accept');
     try {
-      await api.post<AcceptOfferResponse>(`/drivers/offers/${offer.id}/accept`);
-      setOffer(null);
-      setMsg('Offer accepted! Head to the pickup point.');
+      const tripId = (incomingTrip as any).trip_id ?? incomingTrip.id;
+      const { data } = await driverApi.post<Trip>(`/driver/trips/${tripId}/accept`);
+      setCurrentTrip(data);
+      setIncomingTrip(null);
+      setMsg('Umekubali safari! Nenda pickup point.');
       setMsgType('success');
-      const d = await refreshDriver();
-      if (d?.status === 'BUSY') await loadCurrentTrip();
+      await refreshDriver();
     } catch (err) {
       setMsg(extractApiError(err));
       setMsgType('error');
@@ -267,30 +683,23 @@ function DriverHomePanel() {
     setActionLoading(null);
   };
 
-  const declineOffer = async () => {
-    if (!offer) return;
-    setActionLoading('decline');
-    try {
-      const { data } = await api.post<DeclineOfferResponse>(`/drivers/offers/${offer.id}/decline`);
-      setOffer(null);
-      setMsg(data.next_action || 'Offer declined.');
-      setMsgType('success');
-    } catch {}
-    setActionLoading(null);
+  const declineTrip = () => {
+    setIncomingTrip(null);
+    setMsg('Umekataa safari.');
+    setMsgType('success');
   };
 
-  const handleTripAction = async (action: 'driver-arrived' | 'start' | 'complete') => {
+  const handleTripAction = async (action: 'start' | 'complete') => {
     if (!currentTrip) return;
     setActionLoading(action);
     try {
+      const { data } = await driverApi.post<Trip>(`/driver/trips/${currentTrip.id}/${action}`);
       if (action === 'complete') {
-        await api.post<Trip>(`/trips/${currentTrip.id}/complete`);
         setCurrentTrip(null);
-        setMsg('Trip completed! You are now available for new rides.');
+        setMsg('Safari imekamilika! Uko tayari tena.');
         setMsgType('success');
         await refreshDriver();
       } else {
-        const { data } = await api.post<Trip>(`/trips/${currentTrip.id}/${action}`);
         setCurrentTrip(data);
       }
     } catch (err) {
@@ -301,18 +710,11 @@ function DriverHomePanel() {
   };
 
   if (loading) return <TabLoader />;
-  if (!driver) return <Alert type="error" message={error || 'Failed to load driver data.'} />;
+  if (!driver) return <Alert type="error" message={error || 'Imeshindwa kupakia driver data.'} />;
 
   const isOffline   = driver.status === 'OFFLINE';
   const isAvailable = driver.status === 'AVAILABLE';
   const isBusy      = driver.status === 'BUSY';
-
-  const expiryText = (iso: string) => {
-    const diff = new Date(iso).getTime() - Date.now();
-    if (diff <= 0) return 'Expired';
-    const s = Math.floor(diff / 1000);
-    return s < 60 ? `${s}s left` : `${Math.floor(s / 60)}m left`;
-  };
 
   return (
     <div className="driver-panel">
@@ -322,14 +724,14 @@ function DriverHomePanel() {
           <div className={`ds-dot ${isBusy ? 'ds-dot-busy' : isAvailable ? 'ds-dot-on' : 'ds-dot-off'}`} />
           <div>
             <div className="ds-label">
-              {isBusy ? 'On a Trip' : isAvailable ? 'Available' : 'Offline'}
+              {isBusy ? 'Unasafiri' : isAvailable ? 'Unasubiri Safari' : 'Nje ya Mtandao'}
             </div>
             <div className="ds-sub">
               {isBusy
-                ? 'Complete your current trip to go back online'
+                ? 'Maliza safari yako kwanza'
                 : isAvailable
-                ? 'Watching for ride requests…'
-                : 'Go online to start receiving ride requests'}
+                ? 'Unangoja safari kupitia MQTT…'
+                : 'Bonyeza "Ingia Mtandaoni" kupokea safari'}
             </div>
           </div>
         </div>
@@ -340,8 +742,8 @@ function DriverHomePanel() {
             disabled={toggling}
           >
             {toggling
-              ? <><span className="btn-spinner" /> Updating…</>
-              : isAvailable ? 'Go Offline' : 'Go Online'}
+              ? <><span className="btn-spinner" /> Inabadilisha…</>
+              : isAvailable ? 'Toka Mtandaoni' : 'Ingia Mtandaoni'}
           </button>
         )}
       </div>
@@ -349,91 +751,82 @@ function DriverHomePanel() {
       {error && <div className="driver-panel-msg"><Alert type="error" message={error} /></div>}
       {msg   && <div className="driver-panel-msg"><Alert type={msgType} message={msg} /></div>}
 
-      {/* OFFLINE hint */}
+      {/* OFFLINE */}
       {isOffline && (
         <div className="driver-waiting-card">
           <div className="driver-waiting-icon">🔴</div>
-          <div className="driver-waiting-title">You are offline</div>
-          <p className="driver-waiting-desc">
-            Tap "Go Online" above to start receiving ride requests from riders near you.
-          </p>
+          <div className="driver-waiting-title">Uko nje ya mtandao</div>
+          <p className="driver-waiting-desc">Bonyeza "Ingia Mtandaoni" kupokea safari za abiria.</p>
         </div>
       )}
 
-      {/* AVAILABLE: offer or waiting */}
-      {isAvailable && !offer && (
+      {/* AVAILABLE — waiting */}
+      {isAvailable && !incomingTrip && (
         <div className="driver-waiting-card">
           <div className="driver-waiting-icon">📡</div>
-          <div className="driver-waiting-title">Watching for ride requests</div>
+          <div className="driver-waiting-title">Unangoja safari kupitia MQTT</div>
           <p className="driver-waiting-desc">
-            An offer card will appear here automatically when a rider near you requests a trip.
+            Safari itaonekana hapa papo hapo abiria atakapoituma — hakuna kurefresh.
           </p>
         </div>
       )}
 
-      {isAvailable && offer && (
+      {/* INCOMING TRIP via MQTT */}
+      {isAvailable && incomingTrip && (
         <div className="offer-card offer-card-featured" style={{ marginTop: '1rem' }}>
           <div className="offer-card-head">
-            <div className="offer-card-head-left">
-              <OfferStatusBadge status={offer.status} />
-              <span className="offer-expiry">{expiryText(offer.expires_at)}</span>
-            </div>
-            <span className="trip-card-id">Offer #{offer.id}</span>
+            <span className="trip-status-badge ts-searching">🔔 Safari Mpya!</span>
+            <span className="trip-card-id">Trip #{(incomingTrip as any).trip_id ?? incomingTrip.id}</span>
           </div>
-          {offer.trip && (
-            <>
-              <div className="trip-route offer-route">
-                <div className="trip-route-item">
-                  <span className="trip-route-dot dot-pickup" />
-                  <div>
-                    <span className="offer-route-label">Pickup</span>
-                    <span className="trip-route-text">{offer.trip.pickup_address}</span>
-                  </div>
-                </div>
-                <div className="trip-route-line" />
-                <div className="trip-route-item">
-                  <span className="trip-route-dot dot-dest" />
-                  <div>
-                    <span className="offer-route-label">Destination</span>
-                    <span className="trip-route-text">{offer.trip.destination_address}</span>
-                  </div>
-                </div>
+          <div className="trip-route offer-route">
+            <div className="trip-route-item">
+              <span className="trip-route-dot dot-pickup" />
+              <div>
+                <span className="offer-route-label">Pickup</span>
+                <span className="trip-route-text">{(incomingTrip as any).pickup_address}</span>
               </div>
-              <div className="offer-meta-row">
-                <span>🏍️ {offer.trip.ride_type}</span>
-                <span>💵 {offer.trip.payment_method}</span>
-              </div>
-            </>
-          )}
-          {offer.status === 'OFFERED' && (
-            <div className="offer-actions">
-              <button className="btn btn-ghost" onClick={declineOffer} disabled={!!actionLoading}>
-                {actionLoading === 'decline' ? 'Declining…' : '✕ Decline'}
-              </button>
-              <button className="btn btn-primary" onClick={acceptOffer} disabled={!!actionLoading}>
-                {actionLoading === 'accept'
-                  ? <><span className="btn-spinner" /> Accepting…</>
-                  : '✓ Accept Ride'}
-              </button>
             </div>
-          )}
+            <div className="trip-route-line" />
+            <div className="trip-route-item">
+              <span className="trip-route-dot dot-dest" />
+              <div>
+                <span className="offer-route-label">Destination</span>
+                <span className="trip-route-text">{(incomingTrip as any).destination_address}</span>
+              </div>
+            </div>
+          </div>
+          <div className="offer-meta-row">
+            <span>🏍️ {(incomingTrip as any).ride_type}</span>
+            <span>💵 {(incomingTrip as any).payment_method}</span>
+          </div>
+          <div className="offer-actions">
+            <button className="btn btn-ghost" onClick={declineTrip} disabled={!!actionLoading}>
+              ✕ Kataa
+            </button>
+            <button className="btn btn-primary" onClick={acceptTrip} disabled={!!actionLoading}>
+              {actionLoading === 'accept'
+                ? <><span className="btn-spinner" /> Inakubali…</>
+                : '✓ Kubali Safari'}
+            </button>
+          </div>
         </div>
       )}
 
-      {/* BUSY: current trip */}
+      {/* BUSY: current trip actions */}
       {isBusy && currentTrip && (
         <CurrentTripCard
           trip={currentTrip}
           actionLoading={actionLoading}
           onAction={handleTripAction}
+          driverName={driver?.full_name ?? 'Driver'}
         />
       )}
 
       {isBusy && !currentTrip && (
         <div className="driver-waiting-card">
           <div className="driver-waiting-icon">⏳</div>
-          <div className="driver-waiting-title">Loading your current trip…</div>
-          <p className="driver-waiting-desc">Please wait a moment.</p>
+          <div className="driver-waiting-title">Inapakia safari yako…</div>
+          <p className="driver-waiting-desc">Subiri kidogo.</p>
         </div>
       )}
     </div>
@@ -443,147 +836,65 @@ function DriverHomePanel() {
 // ── Home Tab ──────────────────────────────────────────────────────────
 
 const riderActions: { icon: string; title: string; desc: string; tab: Tab | null }[] = [
-  { icon: '🏍️', title: 'Request a Ride',  desc: 'Book a BodaBoda to your destination in seconds.',    tab: 'request-ride'  },
-  { icon: '📋', title: 'My Trips',         desc: 'View your complete ride history and receipts.',       tab: 'my-trips'      },
-  { icon: '🔔', title: 'Notifications',    desc: 'Stay updated with ride alerts and messages.',         tab: 'notifications' },
-  { icon: '👤', title: 'My Profile',       desc: 'View and update your account details.',               tab: 'profile'       },
+  { icon: '🏍️', title: 'Request a Ride', desc: 'Book a BodaBoda to your destination in seconds.', tab: 'request-ride' },
+  { icon: '📋', title: 'My Trips',        desc: 'View your complete ride history and chat.',        tab: 'my-trips'     },
+  { icon: '⚙️', title: 'Settings',        desc: 'Edit your profile, appearance, and preferences.', tab: 'settings'     },
 ];
 
-const driverActions: { icon: string; title: string; desc: string; tab: Tab | null }[] = [
-  { icon: '📨', title: 'Current Offer',   desc: 'Accept or decline the current incoming ride request.', tab: 'current-offer' },
-  { icon: '📋', title: 'Offer History',   desc: 'View all past ride offers and their outcomes.',        tab: 'offer-history' },
-  { icon: '🔔', title: 'Notifications',   desc: 'Stay updated with ride alerts and messages.',          tab: 'notifications' },
-  { icon: '👤', title: 'My Profile',      desc: 'View and update your account and vehicle details.',    tab: 'profile'       },
-];
 
 function HomeTab({ user, setActiveTab }: { user: User; setActiveTab: (t: Tab) => void }) {
-  const isDriver = user.role === 'DRIVER';
-  const driverP  = user.driver_profile;
-  const riderP   = user.rider_profile;
-  const rating   = isDriver ? driverP?.rating : riderP?.rating;
-  const trips    = isDriver ? driverP?.total_trips : riderP?.total_trips;
-  const actions  = isDriver ? driverActions : riderActions;
+  const isDriver  = user.role === 'DRIVER';
   const firstName = user.full_name.split(' ')[0];
 
   return (
     <>
+      {/* Driver: no header clutter — just the live trip panel */}
+      {isDriver && (
+        <div className="db-body" style={{ paddingTop: '1rem' }}>
+          <DriverHomePanel />
+        </div>
+      )}
+
+      {/* Rider: full header + stats */}
+      {!isDriver && (
+      <>
       <div className="db-header">
         <div className="db-header-inner">
           <div>
             <h1 className="db-greeting-text">{getGreeting()}, {firstName} 👋</h1>
-            <p className="db-greeting-sub">{isDriver ? 'Ready to earn today?' : 'Where are you headed today?'}</p>
+            <p className="db-greeting-sub">Unaenda wapi leo?</p>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('profile')}>View Profile</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('settings')}>⚙️</button>
         </div>
       </div>
 
       <div className="db-body">
-        {/* Driver: full online/offline + offer/trip management panel */}
-        {isDriver && <DriverHomePanel />}
 
-        <div className="db-stats">
-          <div className="db-stat">
-            <div className="db-stat-icon rider-stat-icon">⭐</div>
-            <div className="db-stat-info">
-              <div className="db-stat-val">{rating != null ? (rating as number).toFixed(1) : '—'}</div>
-              <div className="db-stat-lbl">My Rating</div>
-            </div>
-          </div>
-          <div className="db-stat">
-            <div className="db-stat-icon rider-stat-icon">🏍️</div>
-            <div className="db-stat-info">
-              <div className="db-stat-val">{trips ?? 0}</div>
-              <div className="db-stat-lbl">Total Trips</div>
-            </div>
-          </div>
-          {isDriver ? (
-            <>
-              <div className="db-stat">
-                <div className="db-stat-icon rider-stat-icon">🔖</div>
-                <div className="db-stat-info">
-                  <div className="db-stat-val">{driverP?.plate_number ?? '—'}</div>
-                  <div className="db-stat-lbl">Plate Number</div>
+        {/* Rider: quick actions */}
+        {!isDriver && (
+          <>
+            <div className="db-section-heading">Menyu ya Haraka</div>
+            <div className="action-grid">
+              {riderActions.map((a) => (
+                <div
+                  key={a.title}
+                  className={`action-card rider-action-card${a.tab ? ' action-card-link' : ''}`}
+                  onClick={() => a.tab && setActiveTab(a.tab)}
+                >
+                  <div className="action-card-icon rider-action-icon">{a.icon}</div>
+                  <div className="action-card-head">
+                    <span className="action-card-title">{a.title}</span>
+                    <span className="action-badge action-badge-live">Open →</span>
+                  </div>
+                  <p className="action-card-desc">{a.desc}</p>
                 </div>
-              </div>
-              <div className="db-stat">
-                <div className="db-stat-icon rider-stat-icon">🛵</div>
-                <div className="db-stat-info">
-                  <div className="db-stat-val ellipsis">{driverP?.vehicle_model ?? '—'}</div>
-                  <div className="db-stat-lbl">Motorcycle</div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="db-stat">
-                <div className="db-stat-icon rider-stat-icon">📱</div>
-                <div className="db-stat-info">
-                  <div className="db-stat-val ellipsis">{user.phone ?? '—'}</div>
-                  <div className="db-stat-lbl">Phone</div>
-                </div>
-              </div>
-              <div className="db-stat">
-                <div className="db-stat-icon rider-stat-icon">✉️</div>
-                <div className="db-stat-info">
-                  <div className="db-stat-val ellipsis">{user.email ?? '—'}</div>
-                  <div className="db-stat-lbl">Email</div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-        {isDriver && driverP && (
-          <div className="info-card">
-            <div className="info-card-head">
-              <span className="info-card-title">Driver Profile</span>
-              <span className="info-card-accent driver-accent">🏍️ Driver</span>
+              ))}
             </div>
-            <div className="info-body">
-              <div className="info-row"><span className="info-label">License Number</span><span className="info-value">{driverP.license_number}</span></div>
-              <div className="info-row"><span className="info-label">Motorcycle</span><span className="info-value">{driverP.vehicle_model}</span></div>
-              <div className="info-row"><span className="info-label">Plate Number</span><span className="info-value">{driverP.plate_number}</span></div>
-              <div className="info-row"><span className="info-label">Verification</span><span className="info-value"><VerificationBadge status={driverP.verification_status} /></span></div>
-              <div className="info-row"><span className="info-label">Rating</span><span className="info-value">{driverP.rating != null ? `${driverP.rating.toFixed(1)} ★` : '—'}</span></div>
-              <div className="info-row"><span className="info-label">Total Trips</span><span className="info-value">{driverP.total_trips}</span></div>
-            </div>
-            <div className="info-card-foot">
-              <button className="btn-driver-sm" onClick={() => setActiveTab('edit-profile')}>Edit Driver Profile</button>
-            </div>
-          </div>
+          </>
         )}
-
-        {!isDriver && riderP && (
-          <div className="info-card">
-            <div className="info-card-head">
-              <span className="info-card-title">Rider Profile</span>
-              <span className="info-card-accent rider-accent">🧑‍💼 Active</span>
-            </div>
-            <div className="info-body">
-              <div className="info-row"><span className="info-label">Rating</span><span className="info-value">{riderP.rating != null ? `${riderP.rating.toFixed(1)} ★` : '—'}</span></div>
-              <div className="info-row"><span className="info-label">Total Trips</span><span className="info-value">{riderP.total_trips}</span></div>
-            </div>
-          </div>
-        )}
-
-        <div className="db-section-heading">Quick Actions</div>
-        <div className="action-grid">
-          {actions.map((a) => (
-            <div
-              key={a.title}
-              className={`action-card ${isDriver ? 'driver-action-card' : 'rider-action-card'}${a.tab ? ' action-card-link' : ''}`}
-              onClick={() => a.tab && setActiveTab(a.tab)}
-            >
-              <div className={`action-card-icon ${isDriver ? 'driver-action-icon' : 'rider-action-icon'}`}>{a.icon}</div>
-              <div className="action-card-head">
-                <span className="action-card-title">{a.title}</span>
-                <span className={`action-badge${a.tab ? ' action-badge-live' : ''}`}>{a.tab ? 'Open →' : 'Coming soon'}</span>
-              </div>
-              <p className="action-card-desc">{a.desc}</p>
-            </div>
-          ))}
-        </div>
       </div>
+      </>
+      )}
     </>
   );
 }
@@ -828,6 +1139,222 @@ function EditProfileTab({ user, updateUser, setActiveTab }: { user: User; update
   );
 }
 
+// ── Settings Tab ─────────────────────────────────────────────────────
+
+function SettingsTab({ user, updateUser }: { user: User; updateUser: (u: User) => void }) {
+  const isDriver = user.role === 'DRIVER';
+  const [section, setSection] = useState<'account' | 'vehicle' | null>(null);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('boda_theme') === 'dark');
+
+  // Dark mode toggle
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('boda_theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.removeItem('boda_theme');
+    }
+  }, [darkMode]);
+
+  // ── Account edit form ──
+  const [accForm, setAccForm] = useState({
+    full_name: user.full_name ?? '', phone: user.phone ?? '',
+    email: user.email ?? '', profile_image_url: user.profile_image_url ?? '',
+  });
+  const [accSaving, setAccSaving] = useState(false);
+  const [accMsg, setAccMsg]       = useState('');
+  const [accErr, setAccErr]       = useState('');
+
+  const handleAccChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setAccForm(p => ({ ...p, [e.target.name]: e.target.value }));
+
+  const saveAccount = async (e: React.FormEvent) => {
+    e.preventDefault(); setAccErr(''); setAccMsg(''); setAccSaving(true);
+    try {
+      const payload: Record<string,string> = {};
+      if (accForm.full_name)         payload.full_name         = accForm.full_name;
+      if (accForm.phone)             payload.phone             = accForm.phone;
+      if (accForm.email)             payload.email             = accForm.email;
+      if (accForm.profile_image_url) payload.profile_image_url = accForm.profile_image_url;
+      const { data } = await api.put<User>('/auth/me', payload);
+      updateUser(data);
+      setAccMsg('Imehifadhiwa!');
+      setSection(null);
+    } catch (err) { setAccErr(extractApiError(err)); }
+    setAccSaving(false);
+  };
+
+  // ── Vehicle/profile edit form (driver only) ──
+  const [vehForm, setVehForm] = useState({
+    license_number: user.driver_profile?.license_number ?? '',
+    vehicle_model:  user.driver_profile?.vehicle_model  ?? '',
+    plate_number:   user.driver_profile?.plate_number   ?? '',
+  });
+  const [vehSaving, setVehSaving] = useState(false);
+  const [vehMsg, setVehMsg]       = useState('');
+  const [vehErr, setVehErr]       = useState('');
+
+  const handleVehChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setVehForm(p => ({ ...p, [e.target.name]: e.target.value }));
+
+  const saveVehicle = async (e: React.FormEvent) => {
+    e.preventDefault(); setVehErr(''); setVehMsg(''); setVehSaving(true);
+    try {
+      const { data } = await api.put<User>('/auth/me/profile', vehForm);
+      updateUser(data);
+      setVehMsg('Imehifadhiwa!');
+      setSection(null);
+    } catch (err) { setVehErr(extractApiError(err)); }
+    setVehSaving(false);
+  };
+
+  return (
+    <div className="settings-page">
+      {/* ── Profile card ── */}
+      <div className="settings-profile-card">
+        <div className="settings-avatar">
+          {user.profile_image_url
+            ? <img src={user.profile_image_url} alt={user.full_name} />
+            : user.full_name.charAt(0).toUpperCase()}
+        </div>
+        <div className="settings-profile-info">
+          <div className="settings-profile-name">{user.full_name}</div>
+          <div className="settings-profile-role">{isDriver ? '🏍️ Driver' : '🧑‍💼 Rider'}</div>
+          {user.phone && <div className="settings-profile-phone">📞 {user.phone}</div>}
+        </div>
+      </div>
+
+      {/* ── Account section ── */}
+      <div className="settings-section">
+        <div className="settings-section-header" onClick={() => setSection(section === 'account' ? null : 'account')}>
+          <div>
+            <div className="settings-section-title">👤 Taarifa za Akaunti</div>
+            <div className="settings-section-sub">Jina, simu, barua pepe, picha</div>
+          </div>
+          <span className="settings-chevron">{section === 'account' ? '▲' : '▶'}</span>
+        </div>
+        {section === 'account' && (
+          <div className="settings-section-body">
+            {accMsg && <Alert type="success" message={accMsg} />}
+            {accErr && <Alert type="error"   message={accErr} />}
+            <form onSubmit={saveAccount} className="edit-form">
+              <div className="form-group">
+                <label>Jina Kamili</label>
+                <input name="full_name" type="text" value={accForm.full_name} onChange={handleAccChange} placeholder="Jina lako kamili" />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Nambari ya Simu</label>
+                  <input name="phone" type="tel" value={accForm.phone} onChange={handleAccChange} placeholder="+255700000000" />
+                </div>
+                <div className="form-group">
+                  <label>Barua Pepe</label>
+                  <input name="email" type="email" value={accForm.email} onChange={handleAccChange} placeholder="wewe@mfano.com" />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>URL ya Picha ya Wasifu</label>
+                <input name="profile_image_url" type="url" value={accForm.profile_image_url} onChange={handleAccChange} placeholder="https://example.com/picha.jpg" />
+                {accForm.profile_image_url && (
+                  <img src={accForm.profile_image_url} alt="preview" className="settings-img-preview"
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
+              </div>
+              <div className="edit-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setSection(null)}>Ghairi</button>
+                <button type="submit" className="btn btn-primary" disabled={accSaving}>
+                  {accSaving ? <><span className="btn-spinner" /> Inahifadhi…</> : 'Hifadhi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+
+      {/* ── Vehicle section (Driver) / Rider stats ── */}
+      <div className="settings-section">
+        <div className="settings-section-header" onClick={() => setSection(section === 'vehicle' ? null : 'vehicle')}>
+          <div>
+            <div className="settings-section-title">{isDriver ? '🏍️ Gari & Leseni' : '📊 Takwimu za Rider'}</div>
+            <div className="settings-section-sub">
+              {isDriver ? 'Modeli ya bodaboda, nambari ya sahani, leseni' : 'Rating na safari zako'}
+            </div>
+          </div>
+          <span className="settings-chevron">{section === 'vehicle' ? '▲' : '▶'}</span>
+        </div>
+        {section === 'vehicle' && (
+          <div className="settings-section-body">
+            {isDriver ? (
+              <>
+                {vehMsg && <Alert type="success" message={vehMsg} />}
+                {vehErr && <Alert type="error"   message={vehErr} />}
+                <form onSubmit={saveVehicle} className="edit-form">
+                  <div className="form-group">
+                    <label>Nambari ya Leseni</label>
+                    <input name="license_number" type="text" value={vehForm.license_number} onChange={handleVehChange} placeholder="DL-12345678" />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Modeli ya Bodaboda</label>
+                      <input name="vehicle_model" type="text" value={vehForm.vehicle_model} onChange={handleVehChange} placeholder="Bajaj Boxer 150" />
+                    </div>
+                    <div className="form-group">
+                      <label>Nambari ya Sahani</label>
+                      <input name="plate_number" type="text" value={vehForm.plate_number} onChange={handleVehChange} placeholder="T 123 ABC" />
+                    </div>
+                  </div>
+                  <div className="edit-actions">
+                    <button type="button" className="btn btn-ghost" onClick={() => setSection(null)}>Ghairi</button>
+                    <button type="submit" className="btn btn-navy" disabled={vehSaving}>
+                      {vehSaving ? <><span className="btn-spinner" /> Inahifadhi…</> : 'Hifadhi'}
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <div className="settings-stats-grid">
+                <div className="settings-stat">
+                  <span className="settings-stat-val">{user.rider_profile?.rating?.toFixed(1) ?? '—'}</span>
+                  <span className="settings-stat-lbl">⭐ Rating</span>
+                </div>
+                <div className="settings-stat">
+                  <span className="settings-stat-val">{user.rider_profile?.total_trips ?? 0}</span>
+                  <span className="settings-stat-lbl">🏍️ Trips</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Appearance ── */}
+      <div className="settings-section">
+        <div className="settings-section-header" style={{ cursor: 'default' }}>
+          <div>
+            <div className="settings-section-title">🎨 Muonekano</div>
+            <div className="settings-section-sub">Mada ya programu (Dark / Light)</div>
+          </div>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={darkMode} onChange={e => setDarkMode(e.target.checked)} />
+            <span className="settings-toggle-track">
+              <span className="settings-toggle-thumb" />
+            </span>
+            <span className="settings-toggle-label">{darkMode ? '🌙 Dark' : '☀️ Light'}</span>
+          </label>
+        </div>
+      </div>
+
+      {/* ── App info ── */}
+      <div className="settings-app-info">
+        <p>BodaBoda v1.0</p>
+        <p className="settings-app-sub">Haki zote zimehifadhiwa © 2026</p>
+      </div>
+    </div>
+  );
+}
+
 // ── Trip Status View (Rider active trip) ──────────────────────────────
 
 function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
@@ -835,18 +1362,60 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   onNewTrip: () => void;
   onViewTrips: () => void;
 }) {
-  const [trip, setTrip] = useState(initialTrip);
-  const [cancelling, setCancelling] = useState(false);
+  const [trip, setTrip]               = useState(initialTrip);
+  const [cancelling, setCancelling]   = useState(false);
+  const [driverPhone, setDriverPhone] = useState('');
+  const [driverId, setDriverId]       = useState<number | null>(initialTrip.assigned_driver?.id ?? null);
+  const [approaching, setApproaching] = useState(false);
+  const [driverPos, setDriverPos]     = useState<{lat:number;lng:number}|null>(null);
+  const [chatOpen, setChatOpen]       = useState(false);
+  const { user } = useAuth();
 
+  // Real-time updates via MQTT (status events)
+  const mqttTopics = ACTIVE_TRIP_STATUSES.includes(trip.status)
+    ? [`rides/${trip.id}/status`]
+    : [];
+
+  useMqtt(mqttTopics, useCallback((event: MqttEvent) => {
+    const p = event.payload as Record<string, unknown>;
+    if (event.event_type === 'RIDE_ACCEPTED') {
+      setDriverPhone(String(p.driver_phone ?? ''));
+      setDriverId(Number(p.driver_id) || null);
+      setTrip(prev => ({
+        ...prev,
+        status: 'DRIVER_ASSIGNED',
+        assigned_driver: {
+          id: Number(p.driver_id) || 0,
+          full_name: String(p.driver_name ?? ''),
+          vehicle_model: String(p.vehicle ?? ''),
+          plate_number: String(p.plate ?? ''),
+          rating: 0,
+        },
+      }));
+    } else if (event.event_type === 'DRIVER_APPROACHING') {
+      setApproaching(true);
+      setTimeout(() => setApproaching(false), 8000);
+    } else if (event.event_type === 'DRIVER_ARRIVED') {
+      setApproaching(false);
+      setTrip(prev => ({ ...prev, status: 'DRIVER_ARRIVED' }));
+    } else if (event.event_type === 'RIDE_STARTED') {
+      setTrip(prev => ({ ...prev, status: 'IN_PROGRESS' }));
+    } else if (event.event_type === 'RIDE_COMPLETED') {
+      setTrip(prev => ({ ...prev, status: 'COMPLETED' }));
+    }
+  }, []));
+
+  // Polling fallback (30s)
   useEffect(() => {
     if (!ACTIVE_TRIP_STATUSES.includes(trip.status)) return;
     const interval = setInterval(async () => {
       try {
         const { data } = await api.get<Trip>(`/trips/${trip.id}`);
         setTrip(data);
+        if (data.assigned_driver?.id) setDriverId(data.assigned_driver.id);
         if (!ACTIVE_TRIP_STATUSES.includes(data.status)) clearInterval(interval);
       } catch {}
-    }, 5000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [trip.id, trip.status]);
 
@@ -861,76 +1430,190 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 
   const canCancel   = ['SEARCHING_DRIVER', 'NO_DRIVER_AVAILABLE'].includes(trip.status);
   const isSearching = trip.status === 'SEARCHING_DRIVER';
-  const isArrived   = trip.status === 'DRIVER_ARRIVED';
+  const isActive    = ACTIVE_TRIP_STATUSES.includes(trip.status);
+  const showMap     = isActive || trip.status === 'COMPLETED';
+  const showChat    = ['DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS'].includes(trip.status);
 
-  const statusMessages: Record<string, string> = {
-    SEARCHING_DRIVER:    'Looking for a driver near you… This may take a moment.',
-    DRIVER_ASSIGNED:     'Your driver is on the way! They will arrive at your pickup point shortly.',
-    DRIVER_ARRIVED:      'Your driver has arrived at the pickup point. Please head over now!',
-    IN_PROGRESS:         'Your trip is in progress. Enjoy the ride! 🏍️',
-    COMPLETED:           'Your trip is complete. Thanks for riding with BodaBoda!',
-    CANCELLED:           'This trip was cancelled.',
-    NO_DRIVER_AVAILABLE: 'No driver was available at this time. Please try again.',
+  const pLat = trip.pickup_lat, pLng = trip.pickup_lng;
+  const eta  = driverPos && pLat && pLng
+    ? Math.max(1, Math.round(haversineKm(driverPos.lat, driverPos.lng, pLat, pLng) / 25 * 60))
+    : null;
+
+  const statusTitles: Record<string,string> = {
+    SEARCHING_DRIVER:    'Inatafuta Dereva…',
+    DRIVER_ASSIGNED:     'Dereva Anakuja',
+    DRIVER_ARRIVED:      'Dereva Amefika!',
+    IN_PROGRESS:         'Safari Inaendelea 🏍️',
+    COMPLETED:           'Safari Imekamilika ✓',
+    CANCELLED:           'Safari Imefutwa',
+    NO_DRIVER_AVAILABLE: 'Hakuna Dereva',
+  };
+
+  const statusDescs: Record<string,string> = {
+    SEARCHING_DRIVER:    'Inatafuta dereva karibu nawe…',
+    DRIVER_ASSIGNED:     trip.assigned_driver ? `${trip.assigned_driver.full_name} anakuelekea` : 'Dereva anakuelekea',
+    DRIVER_ARRIVED:      'Dereva yako amefika! Nenda pickup point sasa.',
+    IN_PROGRESS:         'Furahia safari yako!',
+    COMPLETED:           'Asante kwa kutumia BodaBoda!',
+    CANCELLED:           'Safari hii imefutwa.',
+    NO_DRIVER_AVAILABLE: 'Hakuna dereva. Jaribu tena.',
   };
 
   return (
-    <div className="edit-page-wrap">
-      <div className="edit-card">
-        <div className="edit-card-head">
-          <h1 className="edit-title">Ride Status</h1>
-          <p className="edit-sub">Trip #{trip.id}</p>
+    <div className="tracking-page">
+
+      {/* ── Map area ── */}
+      <div className="tracking-map-area">
+        {/* Floating header on top of map */}
+        <div className="tracking-map-header">
+          <button className="tracking-back-btn" onClick={onViewTrips}>←</button>
+          <div className="tracking-header-center">
+            <span className="tracking-title">
+              {trip.status === 'COMPLETED' ? 'Safari Imekamilika' : `Trip #${trip.id}`}
+            </span>
+            {eta !== null && isActive && (
+              <span className="tracking-eta-sub">⏱ ~{eta} min</span>
+            )}
+          </div>
+          {eta !== null && isActive && (
+            <span className="tracking-eta-badge">~{eta} min</span>
+          )}
         </div>
-        <div className="edit-card-body">
-          <div className="trip-status-view">
-            <div className={`tsv-status-row${isSearching ? ' tsv-searching' : ''}`}>
-              {isSearching && <div className="tsv-pulse" />}
-              <TripStatusBadge status={trip.status} />
-            </div>
 
-            <p className="tsv-message">{statusMessages[trip.status] ?? trip.message}</p>
-
-            {isArrived && (
-              <div className="tsv-arrived-alert">
-                <span className="tsv-arrived-icon">📍</span>
-                <p>Your driver is at the pickup point. Head over now to start your ride!</p>
-              </div>
+        {/* Map */}
+        {showMap ? (
+          <TripLiveMap trip={trip} driverId={driverId} trackingMode onPos={setDriverPos} />
+        ) : (
+          <div className="tracking-map-placeholder">
+            {isSearching ? (
+              <>
+                <div className="tracking-search-spinner" />
+                <p>Inatafuta dereva…</p>
+              </>
+            ) : (
+              <p style={{ color: '#6b7280', fontSize: '0.9rem' }}>Safari imekamilika</p>
             )}
+          </div>
+        )}
+      </div>
 
-            {trip.assigned_driver && (
-              <div className="tsv-driver-card">
-                <div className="tsv-driver-avatar">{trip.assigned_driver.full_name.charAt(0)}</div>
-                <div>
-                  <div className="tsv-driver-name">{trip.assigned_driver.full_name}</div>
-                  <div className="tsv-driver-sub">{trip.assigned_driver.vehicle_model} · {trip.assigned_driver.plate_number}</div>
-                  <div className="tsv-driver-rating">⭐ {trip.assigned_driver.rating.toFixed(1)}</div>
-                </div>
+      {/* ── Chat bottom sheet — always in DOM for MQTT ── */}
+      {showChat && chatOpen && (
+        <div className="chat-sheet-backdrop" onClick={() => setChatOpen(false)} />
+      )}
+      {showChat && (
+        <div className={`chat-sheet${chatOpen ? ' chat-sheet-open' : ''}`}>
+          <div className="chat-sheet-handle" onClick={() => setChatOpen(false)} />
+          <div className="chat-sheet-header">
+            <div className="chat-sheet-person">
+              <div className="chat-sheet-avatar">
+                {(trip.assigned_driver?.full_name ?? 'D').charAt(0).toUpperCase()}
               </div>
-            )}
-
-            <div className="info-card" style={{ marginTop: '1.25rem', marginBottom: 0 }}>
-              <div className="info-body">
-                <div className="info-row"><span className="info-label">Pickup</span><span className="info-value">{trip.pickup_address}</span></div>
-                <div className="info-row"><span className="info-label">Destination</span><span className="info-value">{trip.destination_address}</span></div>
-                <div className="info-row"><span className="info-label">Ride Type</span><span className="info-value">🏍️ {trip.ride_type}</span></div>
-                <div className="info-row"><span className="info-label">Payment</span><span className="info-value">💵 {trip.payment_method}</span></div>
+              <div>
+                <div className="chat-sheet-name">{trip.assigned_driver?.full_name ?? 'Dereva'}</div>
+                <div className="chat-sheet-sub">{trip.assigned_driver?.vehicle_model ?? ''}</div>
               </div>
             </div>
+            {driverPhone && (
+              <a href={`tel:${driverPhone}`} className="chat-sheet-call" title="Piga simu">📞</a>
+            )}
+          </div>
+          <TripChat tripId={trip.id} myRole="RIDER" myName={user?.full_name ?? 'Rider'} />
+        </div>
+      )}
 
-            <div className="tsv-actions">
-              {['NO_DRIVER_AVAILABLE', 'CANCELLED'].includes(trip.status) && (
-                <button className="btn btn-primary" onClick={onNewTrip}>Try Again</button>
-              )}
-              {trip.status === 'COMPLETED' && (
-                <button className="btn btn-primary" onClick={onNewTrip}>Book Another Ride</button>
-              )}
-              {canCancel && (
-                <button className="btn btn-ghost" onClick={cancel} disabled={cancelling}>
-                  {cancelling ? 'Cancelling…' : 'Cancel Ride'}
-                </button>
-              )}
-              <button className="btn btn-ghost" onClick={onViewTrips}>View All Trips →</button>
+      {/* ── Bottom panel ── */}
+      <div className="tracking-bottom">
+
+        {/* Status headline */}
+        <div className="tracking-status-msg">
+          <strong>{statusTitles[trip.status] ?? trip.status}</strong>
+          <p>{statusDescs[trip.status] ?? trip.message}</p>
+        </div>
+
+        {/* Approaching banner */}
+        {approaching && (
+          <div className="tsv-approaching-banner">
+            <span>🏍️</span>
+            <div>
+              <strong>Dereva anakaribia!</strong>
+              <p>Dereva yako yuko karibu — jiandae!</p>
             </div>
           </div>
+        )}
+
+        {/* Driver info card */}
+        {trip.assigned_driver && (
+          <div className="tracking-driver-card">
+            <div className="tracking-driver-avatar">
+              {trip.assigned_driver.full_name.charAt(0).toUpperCase()}
+            </div>
+            <div className="tracking-driver-info">
+              <div className="tracking-driver-name">{trip.assigned_driver.full_name}</div>
+              <div className="tracking-driver-sub">
+                {trip.assigned_driver.vehicle_model} · {trip.assigned_driver.plate_number}
+              </div>
+              {trip.assigned_driver.rating > 0 && (
+                <div className="tracking-driver-rating">⭐ {trip.assigned_driver.rating.toFixed(1)}</div>
+              )}
+            </div>
+            <div className="tracking-driver-btns">
+              {driverPhone && (
+                <a href={`tel:${driverPhone}`} className="tracking-icon-btn tracking-call-btn" title="Piga simu">
+                  📞
+                </a>
+              )}
+              {showChat && (
+                <button
+                  className={`tracking-icon-btn tracking-chat-btn${chatOpen ? ' active' : ''}`}
+                  onClick={() => setChatOpen(o => !o)}
+                  title="Chat"
+                >
+                  💬
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 5-step progress bar */}
+        <TrackSteps status={trip.status} />
+
+        {/* Trip route summary */}
+        <div className="tracking-route">
+          <div className="tracking-route-row">
+            <span className="tracking-route-dot dot-pickup" />
+            <div>
+              <span className="tracking-route-label">Pickup</span>
+              <span className="tracking-route-addr">{trip.pickup_address}</span>
+            </div>
+          </div>
+          <div className="tracking-route-divider" />
+          <div className="tracking-route-row">
+            <span className="tracking-route-dot dot-dest" />
+            <div>
+              <span className="tracking-route-label">Destination</span>
+              <span className="tracking-route-addr">{trip.destination_address}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="tracking-actions">
+          {['NO_DRIVER_AVAILABLE','CANCELLED'].includes(trip.status) && (
+            <button className="btn btn-primary btn-block" onClick={onNewTrip}>Jaribu Tena</button>
+          )}
+          {trip.status === 'COMPLETED' && (
+            <button className="btn btn-primary btn-block" onClick={onNewTrip}>Safari Nyingine</button>
+          )}
+          {canCancel && (
+            <button className="btn btn-ghost btn-block" onClick={cancel} disabled={cancelling}>
+              {cancelling ? 'Inafuta…' : 'Futa Safari'}
+            </button>
+          )}
+          {isActive && (
+            <button className="btn btn-ghost btn-block" onClick={onViewTrips}>Angalia Trips Zote →</button>
+          )}
         </div>
       </div>
     </div>
@@ -940,13 +1623,14 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 // ── Request Ride Tab (RIDER only) ─────────────────────────────────────
 
 function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
-  const [form, setForm]       = useState({ pickup_address: '', destination_address: '' });
-  const [isLoading, setIsLoading] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
-  const [error, setError]     = useState('');
-  const [trip, setTrip]       = useState<Trip | null>(null);
+  const [pickup, setPickup]           = useState<MapLocation | null>(null);
+  const [destination, setDestination] = useState<MapLocation | null>(null);
+  const [isLoading, setIsLoading]     = useState(false);
+  const [isChecking, setIsChecking]   = useState(true);
+  const [error, setError]             = useState('');
+  const [trip, setTrip]               = useState<Trip | null>(null);
 
-  // On mount, look for an existing active trip to resume
+  // Resume active trip if exists
   useEffect(() => {
     api.get<Trip[]>('/trips/my')
       .then(({ data }) => {
@@ -957,14 +1641,22 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
       .finally(() => setIsChecking(false));
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!pickup) { setError('Please set your pickup location.'); return; }
+    if (!destination) { setError('Please set your destination.'); return; }
     setIsLoading(true); setError('');
     try {
-      const { data } = await api.post<Trip>('/trips/request', { ...form, ride_type: 'BODA', payment_method: 'CASH' });
+      const { data } = await api.post<Trip>('/trips/request', {
+        pickup_address: pickup.name,
+        pickup_lat: pickup.lat,
+        pickup_lng: pickup.lng,
+        destination_address: destination.name,
+        destination_lat: destination.lat,
+        destination_lng: destination.lng,
+        ride_type: 'BODA',
+        payment_method: 'CASH',
+      });
       setTrip(data);
     } catch (err) { setError(extractApiError(err)); }
     setIsLoading(false);
@@ -978,34 +1670,50 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
 
   return (
     <div className="edit-page-wrap">
-      <div className="edit-card">
+      <div className="edit-card" style={{ maxWidth: '680px' }}>
         <div className="edit-card-head">
           <button className="edit-back" onClick={() => setActiveTab('home')}>← Back to Home</button>
           <h1 className="edit-title">Request a Ride</h1>
-          <p className="edit-sub">Book a BodaBoda to your destination.</p>
+          <p className="edit-sub">Choose your pickup and destination on the map.</p>
         </div>
         <div className="edit-card-body">
           {error && <Alert type="error" message={error} />}
           <form onSubmit={handleSubmit} className="edit-form">
-            <div className="form-group">
-              <label htmlFor="rr-pickup">Pickup Location</label>
-              <input id="rr-pickup" name="pickup_address" type="text" value={form.pickup_address} onChange={handleChange} placeholder="Enter pickup address or landmark" required />
-            </div>
-            <div className="form-group">
-              <label htmlFor="rr-dest">Destination</label>
-              <input id="rr-dest" name="destination_address" type="text" value={form.destination_address} onChange={handleChange} placeholder="Enter destination address or landmark" required />
-            </div>
-            <div className="ride-summary-box">
-              <div className="ride-summary-row">
-                <span className="ride-summary-label">Ride Type</span>
-                <span className="ride-summary-value">🏍️ BodaBoda</span>
+            <RideMap
+              pickup={pickup}
+              destination={destination}
+              onPickupChange={setPickup}
+              onDestinationChange={setDestination}
+            />
+
+            {/* Summary row */}
+            {pickup && destination && (
+              <div className="ride-summary-box" style={{ marginTop: '1rem' }}>
+                <div className="ride-summary-row">
+                  <span className="ride-summary-label">From</span>
+                  <span className="ride-summary-value" style={{ fontSize: '0.85rem' }}>{pickup.name}</span>
+                </div>
+                <div className="ride-summary-row">
+                  <span className="ride-summary-label">To</span>
+                  <span className="ride-summary-value" style={{ fontSize: '0.85rem' }}>{destination.name}</span>
+                </div>
+                <div className="ride-summary-row">
+                  <span className="ride-summary-label">Ride Type</span>
+                  <span className="ride-summary-value">🏍️ BodaBoda</span>
+                </div>
+                <div className="ride-summary-row">
+                  <span className="ride-summary-label">Payment</span>
+                  <span className="ride-summary-value">💵 Cash</span>
+                </div>
               </div>
-              <div className="ride-summary-row">
-                <span className="ride-summary-label">Payment</span>
-                <span className="ride-summary-value">💵 Cash</span>
-              </div>
-            </div>
-            <button type="submit" className="btn btn-primary btn-block" disabled={isLoading}>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-primary btn-block"
+              disabled={isLoading || !pickup || !destination}
+              style={{ marginTop: '1rem' }}
+            >
               {isLoading ? <><span className="btn-spinner" /> Searching for a driver…</> : '🏍️  Request Ride'}
             </button>
           </form>
@@ -1022,6 +1730,7 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [chatTripId, setChatTripId] = useState<number | null>(null);
 
   useEffect(() => {
     api.get<Trip[]>('/trips/my')
@@ -1043,9 +1752,30 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
     ['SEARCHING_DRIVER', 'NO_DRIVER_AVAILABLE'].includes(status);
 
   const sorted = [...trips].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const chatTrip = chatTripId != null ? sorted.find(t => t.id === chatTripId) : null;
 
   return (
-    <div className="tab-page">
+    <div className="tab-page" style={{ position: 'relative' }}>
+
+      {/* ── Chat bottom sheet ── */}
+      {chatTrip && (
+        <>
+          <div className="chat-sheet-backdrop" onClick={() => setChatTripId(null)} />
+          <div className="chat-sheet chat-sheet-open">
+            <div className="chat-sheet-handle" onClick={() => setChatTripId(null)} />
+            <div className="chat-sheet-header">
+              <button className="chat-sheet-back" onClick={() => setChatTripId(null)}>←</button>
+              <div className="chat-sheet-info">
+                <div className="chat-sheet-title">Trip #{chatTrip.id}</div>
+                <div className="chat-sheet-desc">{chatTrip.pickup_address} → {chatTrip.destination_address}</div>
+              </div>
+              <div className="thco-status"><TripStatusBadge status={chatTrip.status} /></div>
+            </div>
+            <TripChatHistory tripId={chatTrip.id} myRole="RIDER" standalone />
+          </div>
+        </>
+      )}
+
       <div className="tab-page-head">
         <h1 className="tab-page-title">My Trips</h1>
         <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('request-ride')}>+ Request Ride</button>
@@ -1066,7 +1796,10 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
                   <TripStatusBadge status={trip.status} />
                   <span className="trip-card-id">Trip #{trip.id}</span>
                 </div>
-                <span className="trip-card-date">{fmtDate(trip.created_at)} · {fmtTime(trip.created_at)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="trip-card-date">{fmtDate(trip.created_at)} · {fmtTime(trip.created_at)}</span>
+                  <button className="trip-chat-open-btn" onClick={() => setChatTripId(trip.id)} title="Ona mazungumzo">💬</button>
+                </div>
               </div>
               <div className="trip-route">
                 <div className="trip-route-item">
@@ -1091,7 +1824,7 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
               {canCancel(trip.status) && (
                 <div className="trip-card-foot">
                   <button className="btn btn-ghost btn-sm" onClick={() => cancel(trip.id)} disabled={cancellingId === trip.id}>
-                    {cancellingId === trip.id ? 'Cancelling…' : 'Cancel Ride'}
+                    {cancellingId === trip.id ? 'Inafuta…' : 'Futa Safari'}
                   </button>
                 </div>
               )}
@@ -1238,55 +1971,78 @@ function CurrentOfferTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
 // ── Offer History Tab (DRIVER only) ──────────────────────────────────
 
 function OfferHistoryTab() {
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [chatTripId, setChatTripId] = useState<number | null>(null);
 
   useEffect(() => {
-    api.get<Offer[]>('/drivers/offers/history')
-      .then(({ data }) => setOffers(data))
-      .catch(() => setError('Failed to load offer history.'))
+    driverApi.get<Trip[]>('/driver/trips/my')
+      .then(({ data }) => setTrips(data))
+      .catch(() => setError('Imeshindwa kupakia trips.'))
       .finally(() => setIsLoading(false));
   }, []);
 
-  const sorted = [...offers].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const sorted = [...trips].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const chatTrip = chatTripId != null ? sorted.find(t => t.id === chatTripId) : null;
 
   return (
-    <div className="tab-page">
+    <div className="tab-page" style={{ position: 'relative' }}>
+
+      {/* ── Chat bottom sheet ── */}
+      {chatTrip && (
+        <>
+          <div className="chat-sheet-backdrop" onClick={() => setChatTripId(null)} />
+          <div className="chat-sheet chat-sheet-open">
+            <div className="chat-sheet-handle" onClick={() => setChatTripId(null)} />
+            <div className="chat-sheet-header">
+              <button className="chat-sheet-back" onClick={() => setChatTripId(null)}>←</button>
+              <div className="chat-sheet-info">
+                <div className="chat-sheet-title">Trip #{chatTrip.id}</div>
+                <div className="chat-sheet-desc">{chatTrip.pickup_address} → {chatTrip.destination_address}</div>
+              </div>
+              <div className="thco-status"><TripStatusBadge status={chatTrip.status} /></div>
+            </div>
+            <TripChatHistory tripId={chatTrip.id} myRole="DRIVER" standalone />
+          </div>
+        </>
+      )}
+
       <div className="tab-page-head">
-        <h1 className="tab-page-title">Offer History</h1>
+        <h1 className="tab-page-title">My Trips</h1>
       </div>
 
       {isLoading && <TabLoader />}
       {!isLoading && error && <Alert type="error" message={error} />}
-      {!isLoading && !error && offers.length === 0 && (
-        <EmptyState icon="📋" title="No offer history" desc="Your accepted and declined ride offers will appear here." />
+      {!isLoading && !error && trips.length === 0 && (
+        <EmptyState icon="🏍️" title="Hakuna trips bado" desc="Trips ulizokubali zitaonekana hapa." />
       )}
 
       {!isLoading && sorted.length > 0 && (
         <div className="trip-list">
-          {sorted.map(offer => (
-            <div key={offer.id} className="offer-card">
-              <div className="offer-card-head">
-                <div className="offer-card-head-left">
-                  <OfferStatusBadge status={offer.status} />
-                  <span className="trip-card-id">Offer #{offer.id}</span>
+          {sorted.map(trip => (
+            <div key={trip.id} className="trip-card">
+              <div className="trip-card-head">
+                <div className="trip-card-head-left">
+                  <TripStatusBadge status={trip.status} />
+                  <span className="trip-card-id">Trip #{trip.id}</span>
                 </div>
-                <span className="trip-card-date">{fmtDate(offer.created_at)} · {fmtTime(offer.created_at)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="trip-card-date">{fmtDate(trip.created_at)} · {fmtTime(trip.created_at)}</span>
+                  <button className="trip-chat-open-btn" onClick={() => setChatTripId(trip.id)} title="Ona mazungumzo">💬</button>
+                </div>
               </div>
-              {offer.trip && (
-                <div className="trip-route">
-                  <div className="trip-route-item">
-                    <span className="trip-route-dot dot-pickup" />
-                    <span className="trip-route-text">{offer.trip.pickup_address}</span>
-                  </div>
-                  <div className="trip-route-line" />
-                  <div className="trip-route-item">
-                    <span className="trip-route-dot dot-dest" />
-                    <span className="trip-route-text">{offer.trip.destination_address}</span>
-                  </div>
+              <div className="trip-route">
+                <div className="trip-route-item">
+                  <span className="trip-route-dot dot-pickup" />
+                  <span className="trip-route-text">{trip.pickup_address}</span>
                 </div>
-              )}
+                <div className="trip-route-line" />
+                <div className="trip-route-item">
+                  <span className="trip-route-dot dot-dest" />
+                  <span className="trip-route-text">{trip.destination_address}</span>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -1366,16 +2122,6 @@ const IconHome = () => (
     <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
   </svg>
 );
-const IconUser = () => (
-  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
-  </svg>
-);
-const IconEdit = () => (
-  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-  </svg>
-);
 const IconSettings = () => (
   <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
     <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96a7.02 7.02 0 0 0-1.62-.94l-.36-2.54A.484.484 0 0 0 14 2h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.37 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41H14c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.09-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
@@ -1384,11 +2130,6 @@ const IconSettings = () => (
 const IconLogout = () => (
   <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
     <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
-  </svg>
-);
-const IconBell = () => (
-  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
   </svg>
 );
 const IconMoto = () => (
@@ -1401,43 +2142,27 @@ const IconList = () => (
     <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
   </svg>
 );
-const IconOffer = () => (
-  <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" />
-  </svg>
-);
-
 // ── Nav items (role-aware) ────────────────────────────────────────────
 
-function getNavItems(role: string, unreadCount: number): NavItem[] {
+function getNavItems(role: string, _unreadCount: number): NavItem[] {
   if (role === 'RIDER') {
     return [
-      { tab: 'home',          label: 'Home',          icon: <IconHome /> },
-      { tab: 'request-ride',  label: 'Request Ride',  icon: <IconMoto /> },
-      { tab: 'my-trips',      label: 'My Trips',      icon: <IconList /> },
-      { tab: 'notifications', label: 'Notifications', icon: <IconBell />, badge: unreadCount },
-      { tab: 'profile',       label: 'Profile',       icon: <IconUser /> },
-      { tab: 'edit-account',  label: 'Edit Account',  icon: <IconEdit /> },
-      { tab: 'edit-profile',  label: 'Edit Profile',  icon: <IconSettings /> },
+      { tab: 'home',         label: 'Home',         icon: <IconHome />     },
+      { tab: 'request-ride', label: 'Request Ride', icon: <IconMoto />     },
+      { tab: 'my-trips',     label: 'My Trips',     icon: <IconList />     },
+      { tab: 'settings',     label: 'Settings',     icon: <IconSettings /> },
     ];
   }
   if (role === 'DRIVER') {
     return [
-      { tab: 'home',          label: 'Home',          icon: <IconHome /> },
-      { tab: 'current-offer', label: 'Current Offer', icon: <IconOffer /> },
-      { tab: 'offer-history', label: 'Offer History', icon: <IconList /> },
-      { tab: 'notifications', label: 'Notifications', icon: <IconBell />, badge: unreadCount },
-      { tab: 'profile',       label: 'Profile',       icon: <IconUser /> },
-      { tab: 'edit-account',  label: 'Edit Account',  icon: <IconEdit /> },
-      { tab: 'edit-profile',  label: 'Edit Profile',  icon: <IconSettings /> },
+      { tab: 'home',          label: 'Home',         icon: <IconHome />     },
+      { tab: 'offer-history', label: 'My Trips',     icon: <IconList />     },
+      { tab: 'settings',      label: 'Settings',     icon: <IconSettings /> },
     ];
   }
   return [
-    { tab: 'home',          label: 'Home',          icon: <IconHome /> },
-    { tab: 'notifications', label: 'Notifications', icon: <IconBell />, badge: unreadCount },
-    { tab: 'profile',       label: 'Profile',       icon: <IconUser /> },
-    { tab: 'edit-account',  label: 'Edit Account',  icon: <IconEdit /> },
-    { tab: 'edit-profile',  label: 'Edit Profile',  icon: <IconSettings /> },
+    { tab: 'home',     label: 'Home',     icon: <IconHome />     },
+    { tab: 'settings', label: 'Settings', icon: <IconSettings /> },
   ];
 }
 
@@ -1574,6 +2299,7 @@ export default function Dashboard() {
       <div className="spa-content">
         <div key={activeTab} className="spa-content-inner">
           {activeTab === 'home'          && <HomeTab        user={user} setActiveTab={handleTabChange} />}
+          {activeTab === 'settings'      && <SettingsTab    user={user} updateUser={updateUser} />}
           {activeTab === 'profile'       && <ProfileTab     user={user} setActiveTab={handleTabChange} />}
           {activeTab === 'edit-account'  && <EditAccountTab user={user} updateUser={updateUser} setActiveTab={handleTabChange} />}
           {activeTab === 'edit-profile'  && <EditProfileTab user={user} updateUser={updateUser} setActiveTab={handleTabChange} />}

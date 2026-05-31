@@ -21,13 +21,46 @@ export interface DriverProfile {
 export interface User {
   id: number;
   full_name: string;
-  phone: string;
+  phone: string | null;
   email: string;
   role: Role;
   status: string;
+  auth_provider: string;
+  is_verified: boolean;
   profile_image_url?: string | null;
   rider_profile?: RiderProfile | null;
   driver_profile?: DriverProfile | null;
+}
+
+export interface RegisterResponse {
+  message: string;
+  user_id: number;
+}
+
+export interface VerifyEmailPayload {
+  user_id: number;
+  code: string;
+}
+
+export interface SocialDriverProfile {
+  license_number: string;
+  vehicle_model: string;
+  plate_number: string;
+}
+
+export interface GoogleAuthPayload {
+  id_token: string;
+  role: Role;
+  phone?: string;
+  driver_profile?: SocialDriverProfile;
+}
+
+export interface AppleAuthPayload {
+  identity_token: string;
+  full_name?: string;
+  role: Role;
+  phone?: string;
+  driver_profile?: SocialDriverProfile;
 }
 
 export interface AuthResponse {
@@ -115,7 +148,11 @@ export interface Trip {
   rider_id: number;
   driver_id: number | null;
   pickup_address: string;
+  pickup_lat: number | null;
+  pickup_lng: number | null;
   destination_address: string;
+  destination_lat: number | null;
+  destination_lng: number | null;
   ride_type: 'BODA';
   payment_method: 'CASH';
   status: TripStatus;

@@ -6,77 +6,10 @@ on:
     types: [completed]
 
 jobs:
-  build-and-push:
+  deploy-production:
     if: >
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            mtalibani/bodaboda-backend:latest
-            mtalibani/bodaboda-backend:v1
-            mtalibani/bodaboda-backend:${{ github.event.workflow_run.head_sha }}
-
-  deploy-staging:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    environment: staging
-
-    steps:
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/ec2_key
-          chmod 600 ~/.ssh/ec2_key
-          ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null && echo "Key valid"
-
-      - name: Test SSH connection
-        run: |
-          ssh -i ~/.ssh/ec2_key \
-            -o StrictHostKeyChecking=no \
-            -o IdentitiesOnly=yes \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "echo SSH_OK && whoami"
-
-      - name: Deploy to staging
-        run: |
-          ssh -i ~/.ssh/ec2_key \
-            -o StrictHostKeyChecking=no \
-            -o IdentitiesOnly=yes \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "sudo docker pull mtalibani/bodaboda-backend:latest && \
-             sudo docker stop bodaboda-staging || true && \
-             sudo docker rm bodaboda-staging || true && \
-             sudo docker run -d --name bodaboda-staging \
-               -p 8101:8001 \
-               --add-host=host.docker.internal:host-gateway \
-               -e DATABASE_URL='postgresql+asyncpg://postgres:password@host.docker.internal:5432/bodaboda' \
-               -e JWT_SECRET='staging-secret' \
-               -e ACCESS_TOKEN_EXPIRE_MINUTES=30 \
-               -e REFRESH_TOKEN_EXPIRE_DAYS=7 \
-               mtalibani/bodaboda-backend:latest && \
-             sleep 5 && \
-             sudo docker ps | grep bodaboda-staging"
-
-  deploy-production:
-    needs: deploy-staging
     runs-on: ubuntu-latest
     environment: production
 
@@ -86,7 +19,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
-          ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null && echo "Key valid"
+          ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null && echo "SSH key valid ✅"
 
       - name: Test SSH connection
         run: |
@@ -96,22 +29,52 @@ jobs:
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
             "echo SSH_OK && whoami"
 
-      - name: Deploy to production
+      - name: Deploy full stack to production
         run: |
           ssh -i ~/.ssh/ec2_key \
             -o StrictHostKeyChecking=no \
             -o IdentitiesOnly=yes \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
-            "sudo docker pull mtalibani/bodaboda-backend:latest && \
-             sudo docker stop bodaboda-production || true && \
-             sudo docker rm bodaboda-production || true && \
-             sudo docker run -d --name bodaboda-production \
-               -p 8001:8001 \
-               --add-host=host.docker.internal:host-gateway \
-               -e DATABASE_URL='postgresql+asyncpg://postgres:password@host.docker.internal:5432/bodaboda' \
-               -e JWT_SECRET='production-secret' \
-               -e ACCESS_TOKEN_EXPIRE_MINUTES=30 \
-               -e REFRESH_TOKEN_EXPIRE_DAYS=7 \
-               mtalibani/bodaboda-backend:latest && \
-             sleep 5 && \
-             sudo docker ps | grep bodaboda-production"
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+            set -e
+
+            echo "=== Pulling latest code ==="
+            if [ -d "/opt/bodaboda/.git" ]; then
+              cd /opt/bodaboda
+              git pull origin main
+            else
+              sudo mkdir -p /opt/bodaboda
+              sudo chown $USER:$USER /opt/bodaboda
+              git clone https://github.com/mtaliban/-bodaboda-app.git /opt/bodaboda
+              cd /opt/bodaboda
+            fi
+
+            echo "=== Setting environment ==="
+            export VITE_API_BASE_URL=http://${{ secrets.EC2_HOST }}:8001
+            export VITE_DRIVER_SERVICE_URL=http://${{ secrets.EC2_HOST }}:8002
+
+            echo "=== Stopping old containers ==="
+            docker compose down --remove-orphans || true
+
+            echo "=== Building and starting all services ==="
+            docker compose build --no-cache
+            docker compose up -d
+
+            echo "=== Waiting for services to start ==="
+            sleep 15
+
+            echo "=== Running services ==="
+            docker compose ps
+
+            echo "=== Checking MQTT broker ==="
+            docker compose exec -T mosquitto mosquitto_pub \
+              -t rides/deploy/test \
+              -m '{"event_type":"DEPLOY","status":"ok"}' \
+              -q 1 && echo "✅ MQTT broker responding" || echo "⚠️  MQTT check failed"
+
+            echo ""
+            echo "✅ Deploy complete!"
+            echo "   Frontend  : http://${{ secrets.EC2_HOST }}:5173"
+            echo "   Auth API  : http://${{ secrets.EC2_HOST }}:8001"
+            echo "   Driver API: http://${{ secrets.EC2_HOST }}:8002"
+            echo "   Mosquitto : ${{ secrets.EC2_HOST }}:1883"
+          ENDSSH

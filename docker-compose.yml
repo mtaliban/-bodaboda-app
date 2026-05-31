@@ -19,6 +19,41 @@ services:
     networks:
       - monitoring_net
 
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    networks:
+      - monitoring_net
+    restart: unless-stopped
+
+  driver_service:
+    build:
+      context: ./driver_service
+      dockerfile: Dockerfile
+    container_name: driver_service
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/auth_db
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - monitoring_net
+    restart: unless-stopped
+
   auth_service:
     build: .
     ports:
@@ -28,9 +63,17 @@ services:
       JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
       REFRESH_TOKEN_EXPIRE_DAYS: 7
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 465
+      SMTP_USER: bodabodaapp124@gmail.com
+      SMTP_PASSWORD: hrnjxnmxhavtsufy
+      SMTP_FROM: bodabodaapp124@gmail.com
+      SMTP_STARTTLS: "false"
     depends_on:
       db:
         condition: service_healthy
+      mosquitto:
+        condition: service_started
     networks:
       - monitoring_net
 
@@ -166,13 +209,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8001}
+        VITE_DRIVER_SERVICE_URL: ${VITE_DRIVER_SERVICE_URL:-http://localhost:8002}
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
     ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8001
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "5173:80"
     depends_on:
       - auth_service
     networks:

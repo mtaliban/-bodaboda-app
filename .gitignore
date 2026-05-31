@@ -14,3 +14,8 @@ dist/
 .pytest_cache/
 htmlcov/
 .coverage
+mosquitto/data/
+mosquitto/log/
+driver_service/__pycache__/
+driver_service/**/__pycache__/
+driver_service/**/*.pyc

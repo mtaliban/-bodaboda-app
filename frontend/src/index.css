@@ -635,6 +635,77 @@ ul { list-style: none; }
 .auth-link { color: var(--primary); font-weight: 600; }
 .auth-link:hover { text-decoration: underline; }
 
+/* Social auth buttons */
+.social-auth-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.google-btn-container {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  justify-content: center;
+}
+
+.btn-social {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+  font-family: inherit;
+}
+.btn-social:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
+
+.btn-google {
+  background: #fff;
+  color: #3c4043;
+  border: 1.5px solid #dadce0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.btn-google:hover:not(:disabled) {
+  background: #f8f8f8;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  transform: translateY(-1px);
+}
+
+.btn-apple {
+  background: #000;
+  color: #fff;
+  border: 1.5px solid #000;
+}
+.btn-apple:hover:not(:disabled) {
+  background: #1a1a1a;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+
+/* "or continue with email" divider */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin: 0.5rem 0;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
 /* ============================================================
    ─── HOME PAGE ──────────────────────────────────────────────
    ============================================================ */
@@ -2583,6 +2654,27 @@ button.edit-back {
   justify-content: center;
 }
 
+/* Driver chat toggle row */
+.ctc-chat-row { margin: 0.25rem 0; }
+.ctc-chat-toggle {
+  width: 100%;
+  padding: 0.55rem 1rem;
+  border-radius: 10px;
+  border: 1.5px solid var(--primary);
+  background: #fff5ed;
+  color: var(--primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.ctc-chat-toggle.active { background: #ffe8d6; border-color: #e05a00; color: #c04a00; }
+.ctc-chat-toggle:hover { background: #ffe8d6; }
+
 /* ── Trip status view — driver arrived alert ────────────────────────── */
 .tsv-arrived-alert {
   display: flex;
@@ -2804,3 +2896,1068 @@ button.edit-back {
   .otp-box { width: 38px; height: 46px; font-size: 1.1rem; }
   .otp-input-row { gap: 0.35rem; }
 }
+
+/* ── RideMap component ───────────────────────────────────────────────── */
+.ride-map-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.ride-map-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ride-map-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-green { background: #16a34a; }
+.dot-red   { background: #dc2626; }
+
+.ride-map-input-group {
+  display: flex;
+  flex: 1;
+  gap: 0.4rem;
+}
+
+.ride-map-input-inner {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
+.ride-map-input {
+  flex: 1;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+  background: #fff;
+}
+.ride-map-input:focus,
+.ride-map-input.selecting {
+  border-color: var(--color-primary, #e85d04);
+  box-shadow: 0 0 0 3px rgba(232,93,4,0.1);
+}
+
+.ride-map-loc-btn {
+  padding: 0.55rem 0.7rem;
+  background: #f4f4f4;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.2s;
+}
+.ride-map-loc-btn:hover:not(:disabled) { background: #e5e7eb; }
+.ride-map-loc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ride-map-hint {
+  font-size: 0.78rem;
+  color: #e85d04;
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  background: rgba(232,93,4,0.07);
+  border-radius: 6px;
+}
+
+.ride-map-canvas {
+  width: 100%;
+  height: 280px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid #e5e7eb;
+  transition: opacity 0.3s;
+}
+
+.ride-map-loading {
+  width: 100%;
+  height: 280px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  border: 1.5px solid #e5e7eb;
+  margin-top: -280px;
+}
+
+.ride-map-fallback {
+  padding: 1rem;
+  background: #fff7ed;
+  border-radius: 8px;
+  border: 1px solid #fed7aa;
+}
+
+/* Coordinates display under input */
+.ride-map-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ride-map-coords {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.18rem 0.5rem 0.18rem 1.6rem;
+}
+.coords-label {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+.coords-value {
+  font-size: 0.72rem;
+  color: #16a34a;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+}
+.ride-map-coords-placeholder {
+  font-size: 0.7rem;
+  color: #d1d5db;
+  padding: 0.18rem 0.5rem 0.18rem 1.6rem;
+}
+
+/* Clear button — inside input-inner, always overlaid on input */
+.ride-map-clear-btn {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 1rem;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1;
+  z-index: 1;
+}
+.ride-map-clear-btn:hover { color: #374151; }
+
+/* Autocomplete suggestions dropdown */
+.ride-map-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem 0;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.ride-map-suggestions li {
+  padding: 0.55rem 0.85rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  color: #374151;
+  border-bottom: 1px solid #f3f4f6;
+  line-height: 1.3;
+}
+.ride-map-suggestions li:last-child { border-bottom: none; }
+.ride-map-suggestions li:hover { background: #fff7ed; }
+.ride-map-suggestions li:hover .sugg-main { color: #e85d04; }
+
+.sugg-main {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+}
+.sugg-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin-top: 1px;
+}
+
+.ride-map-autocomplete-loading {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+/* Map click buttons */
+.ride-map-click-btns {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.ride-map-click-btn {
+  flex: 1;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.78rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  background: #f9fafb;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #374151;
+}
+.ride-map-click-btn:hover { background: #f3f4f6; }
+.ride-map-click-btn.active {
+  background: #fff7ed;
+  border-color: #e85d04;
+  color: #e85d04;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .ride-map-canvas { height: 220px; }
+  .ride-map-loading { height: 220px; margin-top: -220px; }
+}
+
+/* ── Trip Stage Progress ─────────────────────────────────────────────── */
+.trip-stages {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 1.25rem 0 0.5rem;
+}
+.ts-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  position: relative;
+}
+.ts-stage-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  border: 2.5px solid #d1d5db;
+  background: #f9fafb;
+  color: #9ca3af;
+  transition: all 0.3s;
+  z-index: 1;
+}
+.ts-stage.done .ts-stage-circle {
+  background: #10b981;
+  border-color: #10b981;
+  color: #fff;
+}
+.ts-stage.active .ts-stage-circle {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(232,93,4,0.15);
+}
+.ts-stage-label {
+  font-size: 0.68rem;
+  color: #9ca3af;
+  margin-top: 5px;
+  text-align: center;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.ts-stage.done .ts-stage-label,
+.ts-stage.active .ts-stage-label { color: #374151; font-weight: 600; }
+.ts-stage-line {
+  flex: 1;
+  height: 3px;
+  background: #e5e7eb;
+  margin-bottom: 22px;
+  transition: background 0.3s;
+}
+.ts-stage-line.done { background: #10b981; }
+
+/* ── Driver Phone Call Button ────────────────────────────────────────── */
+.tsv-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.55rem 1.1rem;
+  background: #10b981;
+  color: #fff;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 0.5rem;
+  transition: background 0.2s;
+}
+.tsv-call-btn:hover { background: #059669; color: #fff; }
+
+/* ── Trip Chat ───────────────────────────────────────────────────────── */
+.trip-chat {
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-top: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.tc-header {
+  background: linear-gradient(90deg, var(--primary), #e07020);
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.01em;
+}
+.tc-messages {
+  flex: 1;
+  min-height: 160px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0.75rem 0.75rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  /* WhatsApp-like subtle pattern background */
+  background-color: #e5ddd5;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8bdb4' fill-opacity='0.25'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+.tc-empty {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  text-align: center;
+  margin: auto;
+}
+.tc-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+  margin-bottom: 0.15rem;
+}
+.tc-msg-mine  { align-self: flex-end;   align-items: flex-end;   }
+.tc-msg-theirs{ align-self: flex-start; align-items: flex-start; }
+.tc-msg-name {
+  font-size: 0.68rem;
+  color: #6b7280;
+  margin-bottom: 2px;
+  margin-left: 4px;
+  font-weight: 600;
+}
+.tc-msg-bubble {
+  padding: 0.45rem 0.8rem 0.3rem;
+  border-radius: 16px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  word-break: break-word;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tc-msg-mine .tc-msg-bubble {
+  background: var(--primary);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+  position: relative;
+}
+.tc-msg-mine .tc-msg-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: 0; right: -6px;
+  width: 0; height: 0;
+  border-left: 7px solid var(--primary);
+  border-bottom: 7px solid transparent;
+}
+.tc-msg-theirs .tc-msg-bubble {
+  background: #ffffff;
+  color: #1f2937;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  position: relative;
+}
+.tc-msg-theirs .tc-msg-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: -6px;
+  width: 0; height: 0;
+  border-right: 7px solid #ffffff;
+  border-bottom: 7px solid transparent;
+}
+.tc-msg-time {
+  font-size: 0.62rem;
+  opacity: 0.65;
+  align-self: flex-end;
+  margin-top: 1px;
+}
+.tc-input-row {
+  display: flex;
+  align-items: center;
+  background: #f0f2f5;
+  padding: 0.5rem 0.65rem;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.tc-input-row input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+  background: #fff;
+  color: #1f2937;
+  border-radius: 22px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.10);
+  transition: box-shadow 0.15s;
+}
+.tc-input-row input:focus { box-shadow: 0 1px 6px rgba(0,0,0,0.18); }
+.tc-input-row input::placeholder { color: #adb5bd; }
+.tc-send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  font-size: 1.05rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.1s;
+  box-shadow: 0 2px 6px rgba(255,107,0,0.35);
+}
+.tc-send-btn:hover { background: #e05a00; transform: scale(1.07); }
+.tc-send-btn:disabled { background: #d1d5db; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ── Trip Live Map ───────────────────────────────────────────────────── */
+.trip-live-map-wrap {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1.5px solid #e5e7eb;
+  margin-top: 1.25rem;
+}
+.trip-live-map { height: 220px; width: 100%; }
+.tlm-eta-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.6rem 0.875rem;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+.tlm-eta-item { font-size: 0.82rem; font-weight: 600; color: #374151; }
+.tlm-waiting {
+  text-align: center;
+  font-size: 0.78rem;
+  color: #9ca3af;
+  padding: 0.5rem;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* ── Driver Approaching Banner ───────────────────────────────────────── */
+.tsv-approaching-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #fff7ed, #ffedd5);
+  border: 1.5px solid #fdba74;
+  border-radius: 10px;
+  padding: 0.875rem 1rem;
+  margin: 0.75rem 0;
+  animation: approachPulse 1.5s ease-in-out infinite;
+}
+.tsv-approaching-banner span { font-size: 1.75rem; }
+.tsv-approaching-banner strong { font-size: 0.9rem; color: #c2410c; display: block; }
+.tsv-approaching-banner p { font-size: 0.8rem; color: #9a3412; margin: 0; }
+@keyframes approachPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.3); }
+  50% { box-shadow: 0 0 0 8px rgba(249,115,22,0); }
+}
+
+/* ── Simulation label ────────────────────────────────────────────────── */
+.tlm-sim { color: #9ca3af; font-weight: 400; font-size: 0.72rem; }
+
+/* ── Chat History in My Trips ────────────────────────────────────────── */
+.tch-wrap { margin-top: 0.75rem; }
+.tch-toggle {
+  background: none; border: 1px solid #e5e7eb; border-radius: 8px;
+  padding: 0.35rem 0.75rem; font-size: 0.8rem; color: #6b7280;
+  cursor: pointer; width: 100%; text-align: left;
+  transition: background 0.15s;
+}
+.tch-toggle:hover { background: #f9fafb; }
+.tch-list {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background-color: #e5ddd5;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8bdb4' fill-opacity='0.25'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  border-radius: 10px;
+  padding: 0.6rem 0.6rem 0.4rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.tch-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 80%;
+  margin-bottom: 0.1rem;
+}
+.tch-msg-mine  { align-self: flex-end;   align-items: flex-end;   }
+.tch-msg-theirs{ align-self: flex-start; align-items: flex-start; }
+.tch-sender { font-size: 0.65rem; color: #6b7280; font-weight: 600; margin-bottom: 1px; margin-left: 4px; }
+.tch-bubble {
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem 0.7rem 0.25rem;
+  border-radius: 14px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  word-break: break-word;
+  gap: 1px;
+}
+.tch-msg-mine .tch-bubble {
+  background: var(--primary);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.tch-msg-theirs .tch-bubble {
+  background: #fff;
+  color: #1f2937;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.07);
+}
+.tch-time { font-size: 0.6rem; opacity: 0.6; align-self: flex-end; white-space: nowrap; }
+
+/* ── Tracking Page (Bolt-style) ─────────────────────────────────────── */
+.tracking-page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--nav-h));
+  background: #fff;
+  overflow: hidden;
+}
+@media (max-width: 768px) {
+  .tracking-page { height: calc(100dvh - var(--nav-h) - 65px); }
+}
+
+/* Map area */
+.tracking-map-area {
+  position: relative;
+  flex: 0 0 46vh;
+  min-height: 220px;
+  background: #e5e7eb;
+}
+.tlm-tracking-canvas {
+  width: 100%;
+  height: 100%;
+}
+.tracking-map-placeholder {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.75rem; background: #f3f4f6;
+}
+.tracking-search-spinner {
+  width: 40px; height: 40px;
+  border: 3.5px solid #e5e7eb;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Floating header over map */
+.tracking-map-header {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.50) 0%, transparent 100%);
+}
+.tracking-back-btn {
+  width: 36px; height: 36px;
+  background: #fff;
+  border: none; border-radius: 50%;
+  font-size: 1.1rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: transform 0.15s;
+}
+.tracking-back-btn:hover { transform: scale(1.08); }
+.tracking-header-center { flex: 1; }
+.tracking-title {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+.tracking-eta-sub {
+  display: block;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.85);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+.tracking-eta-badge {
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.28rem 0.65rem;
+  border-radius: 99px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(255,107,0,0.35);
+}
+
+/* Bottom panel */
+.tracking-bottom {
+  flex: 1;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 22px 22px 0 0;
+  margin-top: -22px;
+  z-index: 10;
+  padding: 1.25rem 1.25rem 2rem;
+  box-shadow: 0 -6px 24px rgba(0,0,0,0.10);
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  transition: padding 0.2s;
+}
+
+/* ── Chat bottom sheet ───────────────────────────────────────────────── */
+.chat-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 200;
+  animation: csBackdropIn 0.2s ease;
+}
+@keyframes csBackdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.chat-sheet {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 72vh;
+  max-height: 72vh;
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.18);
+}
+.chat-sheet.chat-sheet-open {
+  transform: translateY(0);
+}
+.chat-sheet-handle {
+  width: 40px; height: 4px;
+  background: #d1d5db;
+  border-radius: 2px;
+  margin: 10px auto 6px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.chat-sheet-handle:hover { background: #9ca3af; }
+.chat-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--primary);
+  color: #fff;
+  flex-shrink: 0;
+}
+.chat-sheet-back {
+  background: none; border: none; color: #fff;
+  font-size: 1.3rem; cursor: pointer; padding: 0.15rem 0.4rem;
+  line-height: 1; border-radius: 6px; transition: background 0.15s;
+}
+.chat-sheet-back:hover { background: rgba(255,255,255,0.15); }
+.chat-sheet-person {
+  display: flex; align-items: center; gap: 0.6rem; flex: 1; min-width: 0;
+}
+.chat-sheet-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,0.25); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 1rem; flex-shrink: 0;
+}
+.chat-sheet-name { font-weight: 700; font-size: 0.95rem; line-height: 1.2; }
+.chat-sheet-sub  { font-size: 0.72rem; opacity: 0.8; }
+.chat-sheet-call {
+  color: #fff; text-decoration: none; font-size: 1.2rem;
+  width: 36px; height: 36px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center;
+  transition: background 0.15s; flex-shrink: 0;
+}
+.chat-sheet-call:hover { background: rgba(255,255,255,0.15); }
+.chat-sheet-info { flex: 1; min-width: 0; }
+.chat-sheet-title { font-weight: 700; font-size: 0.95rem; }
+.chat-sheet-desc { font-size: 0.72rem; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* TripChat / TripChatHistory fills the sheet */
+.chat-sheet .trip-chat {
+  flex: 1; min-height: 0; margin-top: 0;
+  border-radius: 0; border: none; box-shadow: none;
+  display: flex; flex-direction: column;
+}
+.chat-sheet .tc-header { display: none; }
+.chat-sheet .tc-messages { flex: 1; max-height: none; min-height: 0; }
+.chat-sheet .tch-standalone { flex: 1; min-height: 0; }
+
+/* Status headline */
+.tracking-status-msg { text-align: center; padding-bottom: 0.25rem; }
+.tracking-status-msg strong { display: block; font-size: 1.05rem; font-weight: 700; color: var(--navy); }
+.tracking-status-msg p { font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.2rem; }
+
+/* Driver info card */
+.tracking-driver-card {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem;
+  background: #f9fafb;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+}
+.tracking-driver-avatar {
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1.4rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.tracking-driver-info { flex: 1; min-width: 0; }
+.tracking-driver-name { font-size: 0.95rem; font-weight: 700; color: var(--navy); }
+.tracking-driver-sub  { font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.12rem; }
+.tracking-driver-rating { font-size: 0.78rem; color: #d97706; font-weight: 600; margin-top: 0.12rem; }
+.tracking-driver-btns { display: flex; gap: 0.5rem; flex-shrink: 0; margin-left: auto; }
+.tracking-icon-btn {
+  width: 46px; height: 46px;
+  border-radius: 50%; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem;
+  transition: transform 0.15s, box-shadow 0.15s;
+  text-decoration: none;
+}
+.tracking-icon-btn:active { transform: scale(0.9); }
+.tracking-call-btn { background: #dcfce7; box-shadow: 0 2px 6px rgba(16,185,129,0.2); }
+.tracking-chat-btn { background: var(--primary); color: #fff; box-shadow: 0 2px 8px rgba(255,107,0,0.35); }
+.tracking-chat-btn.active { background: #e05a00; box-shadow: 0 2px 8px rgba(224,90,0,0.4); }
+
+/* 5-step progress bar */
+.track-steps {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.5rem 0 0.25rem;
+}
+.track-step-group {
+  display: flex;
+  align-items: flex-start;
+  flex: 1;
+}
+.track-step-group:last-child { flex: 0 0 auto; }
+.track-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+.track-dot {
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  border: 2.5px solid #d1d5db;
+  background: #fff;
+  transition: all 0.3s var(--ease);
+}
+.track-dot.done {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.track-dot.active {
+  background: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(255,107,0,0.18);
+}
+.track-label {
+  font-size: 0.6rem;
+  color: #9ca3af;
+  text-align: center;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.track-label.lit { color: var(--navy); font-weight: 700; }
+.track-line {
+  flex: 1;
+  height: 2.5px;
+  background: #e5e7eb;
+  margin: 5px 2px 0;
+  border-radius: 2px;
+  transition: background 0.3s var(--ease);
+}
+.track-line.done { background: var(--primary); }
+
+/* Route summary in tracking panel */
+.tracking-route {
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  padding: 0.75rem 1rem;
+}
+.tracking-route-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.tracking-route-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+.tracking-route-dot.dot-pickup { background: #10b981; }
+.tracking-route-dot.dot-dest   { background: #ef4444; }
+.tracking-route-label {
+  display: block;
+  font-size: 0.68rem;
+  color: #9ca3af;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tracking-route-addr {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--navy);
+  font-weight: 500;
+  margin-top: 0.1rem;
+}
+.tracking-route-divider {
+  width: 1.5px; height: 18px;
+  background: #e5e7eb;
+  margin: 4px 0 4px 4px;
+}
+
+/* Action buttons in tracking */
+.tracking-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ── Settings Page ──────────────────────────────────────────────────── */
+.settings-page {
+  max-width: 540px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Profile card at top */
+.settings-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border-radius: 16px;
+  padding: 1.25rem;
+  color: white;
+  margin-bottom: 0.25rem;
+}
+.settings-avatar {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem; font-weight: 700;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,0.4);
+}
+.settings-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.settings-profile-name  { font-size: 1.05rem; font-weight: 700; }
+.settings-profile-role  { font-size: 0.8rem; opacity: 0.85; margin-top: 0.2rem; }
+.settings-profile-phone { font-size: 0.78rem; opacity: 0.75; margin-top: 0.15rem; }
+
+/* Settings sections */
+.settings-section {
+  background: white;
+  border-radius: 14px;
+  border: 1.5px solid var(--border);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs);
+}
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.125rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.settings-section-header:hover { background: #fafafa; }
+.settings-section-title { font-size: 0.9rem; font-weight: 700; color: var(--navy); }
+.settings-section-sub   { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
+.settings-chevron       { font-size: 0.7rem; color: var(--text-muted); }
+.settings-section-body  {
+  padding: 0 1.125rem 1.125rem;
+  border-top: 1px solid var(--border-light);
+}
+
+/* Profile image preview */
+.settings-img-preview {
+  width: 64px; height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-top: 0.5rem;
+  border: 2px solid var(--border);
+}
+
+/* Rider stats grid */
+.settings-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+.settings-stat {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 0.875rem;
+  text-align: center;
+}
+.settings-stat-val { display: block; font-size: 1.4rem; font-weight: 800; color: var(--navy); }
+.settings-stat-lbl { display: block; font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+/* Dark/Light toggle */
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+}
+.settings-toggle input { display: none; }
+.settings-toggle-track {
+  width: 44px; height: 24px;
+  background: #d1d5db;
+  border-radius: 99px;
+  position: relative;
+  transition: background 0.25s;
+  flex-shrink: 0;
+}
+.settings-toggle input:checked ~ .settings-toggle-track { background: var(--primary); }
+.settings-toggle-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.25s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.settings-toggle input:checked ~ .settings-toggle-track .settings-toggle-thumb { transform: translateX(20px); }
+.settings-toggle-label { font-size: 0.82rem; font-weight: 600; color: var(--navy); }
+
+/* App info footer */
+.settings-app-info {
+  text-align: center;
+  padding: 1rem 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.settings-app-sub { margin-top: 0.25rem; }
+
+/* Chat history empty state */
+.tch-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  padding: 0.5rem;
+}
+
+/* ── Trip card chat icon button (top-right of card) ─────────────────── */
+.trip-chat-open-btn {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--primary); color: #fff; border: none;
+  font-size: 1rem; cursor: pointer; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(255,107,0,0.35);
+  transition: background 0.15s, transform 0.1s;
+}
+.trip-chat-open-btn:hover { background: #e05a00; transform: scale(1.07); }
+
+/* status badge wrapper inside sheet header */
+.thco-status { flex-shrink: 0; }
+
+/* Messages fill remaining space */
+.tch-standalone {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background-color: #e5ddd5;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c8bdb4' fill-opacity='0.25'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* ── Dark Mode ──────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:             #111827;
+  --bg-card:        #1F2937;
+  --border:         #374151;
+  --border-light:   #2D3748;
+  --text:           #F9FAFB;
+  --text-secondary: #D1D5DB;
+  --text-muted:     #6B7280;
+  --white:          #1F2937;
+  --navy:           #F9FAFB;
+  --navy-800:       #E5E7EB;
+}
+[data-theme="dark"] body           { background: #111827; color: #F9FAFB; }
+[data-theme="dark"] .spa-sidebar   { background: #1a2336; border-color: #374151; }
+[data-theme="dark"] .spa-content   { background: #1F2937; }
+[data-theme="dark"] .info-card,
+[data-theme="dark"] .edit-card,
+[data-theme="dark"] .trip-card,
+[data-theme="dark"] .current-trip-card,
+[data-theme="dark"] .settings-section,
+[data-theme="dark"] .tracking-bottom { background: #1F2937; border-color: #374151; color: #F9FAFB; }
+[data-theme="dark"] .spa-bottom-nav  { background: #1a2336; border-color: #374151; }
+[data-theme="dark"] input,
+[data-theme="dark"] textarea         { background: #374151; border-color: #4B5563; color: #F9FAFB; }
+[data-theme="dark"] input::placeholder { color: #6B7280; }
+[data-theme="dark"] .tab-page,
+[data-theme="dark"] .page-wrap       { background: #111827; }
