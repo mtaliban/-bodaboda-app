@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
 
   auth_service:
-    image: ${DOCKERHUB_USERNAME}/bodaboda-auth:latest
+    image: ${DOCKERHUB_USERNAME}/bodaboda-backend:latest
     ports:
       - "8001:8001"
     environment:
