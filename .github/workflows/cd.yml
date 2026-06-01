@@ -46,7 +46,7 @@ jobs:
             VITE_API_BASE_URL=http://${{ secrets.EC2_HOST }}:8001
             VITE_DRIVER_SERVICE_URL=http://${{ secrets.EC2_HOST }}:8002
 
-  deploy-production:
+  deploy-staging:
     needs: build-and-push
     runs-on: ubuntu-latest
 
@@ -56,7 +56,48 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
-          ssh-keygen -y -f ~/.ssh/ec2_key > /dev/null && echo "SSH key valid ✅"
+
+      - name: Deploy to staging
+        run: |
+          ssh -i ~/.ssh/ec2_key \
+            -o StrictHostKeyChecking=no \
+            -o IdentitiesOnly=yes \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
+            set -e
+            cd /opt/bodaboda
+            git pull origin main
+
+            echo "=== Stopping old containers ==="
+            docker stop $(docker ps -q) 2>/dev/null || true
+            docker rm $(docker ps -aq) 2>/dev/null || true
+
+            echo "=== Pulling images ==="
+            docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
+            docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
+            docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
+
+            echo "=== Starting staging stack ==="
+            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d
+
+            echo "=== Waiting for services ==="
+            sleep 15
+
+            echo "=== Health checks ==="
+            curl -sf http://localhost:8001/health && echo "✅ Auth API OK" || (echo "❌ Auth API FAILED" && exit 1)
+            curl -sf http://localhost:8002/health && echo "✅ Driver API OK" || (echo "❌ Driver API FAILED" && exit 1)
+            echo "✅ Staging passed!"
+          ENDSSH
+
+  deploy-production:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
 
       - name: Deploy to production
         run: |
@@ -65,37 +106,11 @@ jobs:
             -o IdentitiesOnly=yes \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
             set -e
+            cd /opt/bodaboda
 
-            echo "=== Pulling latest code ==="
-            if [ -d "/opt/bodaboda/.git" ]; then
-              cd /opt/bodaboda
-              git pull origin main
-            else
-              sudo mkdir -p /opt/bodaboda
-              sudo chown $USER:$USER /opt/bodaboda
-              git clone https://github.com/mtaliban/-bodaboda-app.git /opt/bodaboda
-              cd /opt/bodaboda
-            fi
-
-            echo "=== Stopping old containers ==="
-            docker stop $(docker ps -q) 2>/dev/null || true
-            docker rm $(docker ps -aq) 2>/dev/null || true
-
-            echo "=== Pulling latest images ==="
-            docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
-            docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
-            docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
-
-            echo "=== Starting services ==="
-            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d
-
-            echo "=== Waiting for services ==="
-            sleep 10
-
-            echo "=== Running services ==="
+            echo "=== Production is live ==="
             docker compose ps
 
-            echo "=== Checking MQTT broker ==="
             docker compose exec -T mosquitto mosquitto_pub \
               -t rides/deploy/test \
               -m '{"event_type":"DEPLOY","status":"ok"}' \
