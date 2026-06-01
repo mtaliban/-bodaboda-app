@@ -32,7 +32,7 @@ services:
     restart: unless-stopped
 
   driver_service:
-    image: ${DOCKERHUB_USERNAME}/bodaboda-driver:latest
+    image: ${DOCKER_USERNAME}/bodaboda-driver:latest
     container_name: driver_service
     ports:
       - "8002:8002"
@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
 
   auth_service:
-    image: ${DOCKERHUB_USERNAME}/bodaboda-backend:latest
+    image: ${DOCKER_USERNAME}/bodaboda-backend:latest
     ports:
       - "8001:8001"
     environment:
@@ -74,7 +74,7 @@ services:
       - app_net
 
   frontend:
-    image: ${DOCKERHUB_USERNAME}/bodaboda-frontend:latest
+    image: ${DOCKER_USERNAME}/bodaboda-frontend:latest
     ports:
       - "5173:80"
     depends_on:
