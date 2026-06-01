@@ -57,6 +57,22 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
 
+      - name: Debug SSH key
+        run: |
+          echo "Key first line:"
+          head -1 ~/.ssh/ec2_key
+          echo "Key last line:"
+          tail -1 ~/.ssh/ec2_key
+          echo "Key length (chars):"
+          wc -c < ~/.ssh/ec2_key
+          echo "Testing SSH connection..."
+          ssh -i ~/.ssh/ec2_key \
+            -o StrictHostKeyChecking=no \
+            -o IdentitiesOnly=yes \
+            -o ConnectTimeout=10 \
+            -v \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo SSH_OK" 2>&1 | tail -20
+
       - name: Deploy to staging
         run: |
           ssh -i ~/.ssh/ec2_key \
