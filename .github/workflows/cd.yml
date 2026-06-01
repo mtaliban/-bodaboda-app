@@ -126,7 +126,7 @@ jobs:
 
             echo ""
             echo "✅ Deploy complete!"
-            echo "   Frontend  : http://${{ secrets.EC2_HOST }}:5173"
+            echo "   Frontend  : http://${{ secrets.EC2_HOST }}"
             echo "   Auth API  : http://${{ secrets.EC2_HOST }}:8001"
             echo "   Driver API: http://${{ secrets.EC2_HOST }}:8002"
             echo "   MQTT WS   : ws://${{ secrets.EC2_HOST }}:9001"

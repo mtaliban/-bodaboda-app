@@ -87,7 +87,7 @@ services:
         VITE_DRIVER_SERVICE_URL: http://${EC2_HOST:-localhost}:8002
     image: ${DOCKER_USERNAME}/bodaboda-frontend:latest
     ports:
-      - "5173:80"
+      - "80:80"
     depends_on:
       - auth_service
     networks:
