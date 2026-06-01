@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import mqtt, { MqttClient } from 'mqtt';
 
-const MQTT_WS_URL = 'ws://localhost:9001';
+const MQTT_WS_URL = `ws://${window.location.hostname}:9001`;
 
 export interface MqttEvent {
   event_id: string;
