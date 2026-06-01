@@ -60,7 +60,7 @@ class EmailService:
             await smtp.send_message(msg)
 
         logger.info("Verification code email sent to %s", to_email)
-        _log_code("EMAIL VERIFICATION", to_email, code)
+        _log_code_sent("EMAIL VERIFICATION", to_email, code)
 
     @staticmethod
     async def send_reset_code(to_email: str, full_name: str, code: str) -> None:
@@ -115,7 +115,7 @@ class EmailService:
             await smtp.send_message(msg)
 
         logger.info("Reset code email sent to %s", to_email)
-        _log_code("PASSWORD RESET", to_email, code)
+        _log_code_sent("PASSWORD RESET", to_email, code)
 
 
 def _log_code(channel: str, destination: str, code: str) -> None:
@@ -123,9 +123,22 @@ def _log_code(channel: str, destination: str, code: str) -> None:
     print(f"\n{border}")
     print(f"  [BODABODA DEV — {channel} NOT CONFIGURED]")
     print(f"  Destination : {destination}")
-    print(f"  Reset code  : {code}")
+    print(f"  Code        : {code}")
     print(f"  (Expires in 10 minutes)")
     print(f"{border}\n", flush=True)
     logger.warning(
-        "[DEV] %s reset code for %s: %s", channel, destination, code
+        "[DEV] %s code for %s: %s", channel, destination, code
+    )
+
+
+def _log_code_sent(channel: str, destination: str, code: str) -> None:
+    border = "=" * 60
+    print(f"\n{border}")
+    print(f"  [BODABODA — {channel} SENT via SMTP]")
+    print(f"  Destination : {destination}")
+    print(f"  Code        : {code}")
+    print(f"  (Check inbox or spam folder — expires in 10 minutes)")
+    print(f"{border}\n", flush=True)
+    logger.info(
+        "[SMTP] %s code sent to %s: %s", channel, destination, code
     )

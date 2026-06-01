@@ -39,6 +39,9 @@ class EmailVerificationService:
         self.db.add(record)
         await self.db.commit()
 
+        # Always log the code — useful when email goes to spam or SMTP fails
+        _log_verification_code(user.email, code)
+
         try:
             await EmailService.send_verification_code(
                 to_email=user.email,
@@ -48,7 +51,7 @@ class EmailVerificationService:
         except Exception as exc:
             import logging
             logging.getLogger("bodaboda.email").warning(
-                "Email delivery failed for %s: %s — code is in logs above", user.email, exc
+                "Email delivery failed for %s: %s", user.email, exc
             )
 
     async def verify_code(self, user_id: int, code: str) -> User:
@@ -84,3 +87,13 @@ class EmailVerificationService:
         user.is_verified = True
         await self.db.commit()
         return user
+
+
+def _log_verification_code(email: str, code: str) -> None:
+    border = "=" * 60
+    print(f"\n{border}")
+    print(f"  [BODABODA — EMAIL VERIFICATION CODE]")
+    print(f"  User email  : {email}")
+    print(f"  Code        : {code}")
+    print(f"  (Expires in 10 minutes)")
+    print(f"{border}\n", flush=True)

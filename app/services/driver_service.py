@@ -294,14 +294,15 @@ class DriverService:
         query = select(Driver).where(Driver.status == DriverStatus.AVAILABLE)
         if already_offered_ids:
             query = query.where(not_(Driver.id.in_(already_offered_ids)))
-        query = query.limit(1)
 
         result = await self.db.execute(query)
-        next_driver = result.scalar_one_or_none()
+        candidates = list(result.scalars().all())
 
-        if not next_driver:
+        if not candidates:
             return None
 
+        # Sort by proximity to pickup — drivers with no location go last
+        next_driver = _nearest_driver(candidates, trip.pickup_lat, trip.pickup_lng)
         return await self._create_offer(trip, next_driver)
 
     async def _create_offer(self, trip: Trip, driver: Driver) -> DriverTripOffer:
@@ -326,3 +327,28 @@ class DriverService:
         )
 
         return offer
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Return distance in km between two GPS coordinates."""
+    import math
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _nearest_driver(candidates: list, pickup_lat, pickup_lng) -> "Driver":
+    """Return the closest available driver to the pickup point.
+    Drivers with no stored location are placed last (treated as very far away)."""
+    _BIG = float("inf")
+
+    def distance(driver) -> float:
+        if driver.current_lat is None or driver.current_lng is None:
+            return _BIG
+        if pickup_lat is None or pickup_lng is None:
+            return _BIG
+        return _haversine_km(pickup_lat, pickup_lng, driver.current_lat, driver.current_lng)
+
+    return min(candidates, key=distance)

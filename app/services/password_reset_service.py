@@ -58,20 +58,24 @@ class PasswordResetService:
         self.db.add(record)
         await self.db.commit()
 
-        # Always send via email (SMS not configured)
+        # Always log the code so admin can find it if email goes to spam
+        _log_reset_code(user.email, code)
+
+        # Send via email — failure is non-fatal; code is already in Docker logs
         try:
             await EmailService.send_reset_code(
                 to_email=user.email,
                 full_name=user.full_name,
                 code=code,
             )
-            masked = _mask_email(user.email)
-            return f"Reset code sent to {masked}"
         except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Failed to send reset code: {exc}",
+            import logging
+            logging.getLogger("bodaboda.email").warning(
+                "Reset email delivery failed for %s: %s", user.email, exc
             )
+
+        masked = _mask_email(user.email)
+        return f"Reset code sent to {masked}"
 
     async def verify_code(self, email_or_phone: str, code: str) -> str:
         user = await self._find_user(email_or_phone)
@@ -141,3 +145,13 @@ def _mask_email(email: str) -> str:
 
 def _mask_phone(phone: str) -> str:
     return f"{phone[:4]}****{phone[-2:]}"
+
+
+def _log_reset_code(email: str, code: str) -> None:
+    border = "=" * 60
+    print(f"\n{border}")
+    print(f"  [BODABODA — PASSWORD RESET CODE]")
+    print(f"  User email  : {email}")
+    print(f"  Code        : {code}")
+    print(f"  (Expires in 10 minutes)")
+    print(f"{border}\n", flush=True)

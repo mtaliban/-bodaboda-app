@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
+import sqlalchemy as sa
 from sqlalchemy import BigInteger, ForeignKey, String, Enum as SAEnum, TIMESTAMP, DECIMAL, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,6 +33,8 @@ class Driver(Base):
     status: Mapped[DriverStatus] = mapped_column(SAEnum(DriverStatus, name="driverstatus"), nullable=False, default=DriverStatus.OFFLINE)
     rating: Mapped[Decimal] = mapped_column(DECIMAL(3, 2), nullable=False, default=Decimal("5.00"))
     total_trips: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    current_lat: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True, default=None)
+    current_lng: Mapped[Optional[float]] = mapped_column(sa.Float, nullable=True, default=None)
     current_trip_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("trips.id"), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=_utcnow, nullable=False)

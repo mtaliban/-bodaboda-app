@@ -247,6 +247,12 @@ async def update_location(
     db: AsyncSession = Depends(get_db),
 ):
     driver = await _get_driver(current_user, db)
+
+    # Persist location so proximity-based matching can use it
+    driver.current_lat = body.lat
+    driver.current_lng = body.lng
+    await db.commit()
+
     await mqtt_publisher.publish_driver_location(
         driver_id=driver.id,
         trip_id=body.trip_id,
