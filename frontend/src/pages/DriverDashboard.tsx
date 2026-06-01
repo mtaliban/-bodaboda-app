@@ -114,7 +114,7 @@ export default function DriverDashboard() {
       pollRef.current = setInterval(fetchOffer, 8000);
     } else {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-      if (driver?.status !== 'AVAILABLE') setOffer(null);
+      setOffer(null);
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [driver?.status, fetchOffer]);
