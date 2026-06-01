@@ -81,7 +81,20 @@ jobs:
               docker compose up -d
 
             echo "=== Waiting for services to start ==="
-            sleep 30
+            for i in $(seq 1 20); do
+              sleep 5
+              AUTH=$(curl -sf http://localhost:8001/health 2>/dev/null && echo ok || echo fail)
+              DRIVER=$(curl -sf http://localhost:8002/health 2>/dev/null && echo ok || echo fail)
+              echo "Attempt $i — auth:$AUTH driver:$DRIVER"
+              if [ "$AUTH" = "ok" ] && [ "$DRIVER" = "ok" ]; then
+                break
+              fi
+              if [ $i -eq 20 ]; then
+                echo "❌ Services did not start in time"
+                docker compose logs --tail=30
+                exit 1
+              fi
+            done
 
             echo "=== Health checks ==="
             curl -sf http://localhost:8001/health && echo "✅ Auth API OK" || (echo "❌ Auth API FAILED" && exit 1)
