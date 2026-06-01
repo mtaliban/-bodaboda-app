@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Alert from '../components/Alert';
 import { Role } from '../types';
 import { AxiosError } from 'axios';
 import { trackClick } from '../metrics';
+import api from '../api/axios';
 
 interface FormState {
   full_name: string;
@@ -45,13 +46,20 @@ export default function Register() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { register } = useAuth();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [userId, setUserId] = useState<number | null>(null);
+  const [sentMsg, setSentMsg] = useState('');
+  const [code, setCode] = useState(['', '', '', '', '', '']);
+  const codeRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  const { register, verifyEmail } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  // ── Step 1: submit registration form ──────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -67,8 +75,9 @@ export default function Register() {
 
     setIsLoading(true);
     try {
+      let result;
       if (role === 'DRIVER') {
-        await register({
+        result = await register({
           full_name: form.full_name,
           phone: form.phone,
           email: form.email,
@@ -81,7 +90,7 @@ export default function Register() {
           },
         });
       } else {
-        await register({
+        result = await register({
           full_name: form.full_name,
           phone: form.phone,
           email: form.email,
@@ -89,7 +98,9 @@ export default function Register() {
           role: 'RIDER',
         });
       }
-      navigate('/login', { state: { registered: true } });
+      setUserId(result.user_id);
+      setSentMsg(result.message);
+      setStep(2);
     } catch (err) {
       setError(extractApiError(err));
     } finally {
@@ -97,17 +108,149 @@ export default function Register() {
     }
   };
 
+  // ── Step 2: core verify logic (called automatically when 6 digits filled) ──
+  const doVerify = async (fullCode: string) => {
+    if (fullCode.length < 6 || !userId || isLoading) return;
+    setError('');
+    setIsLoading(true);
+    trackClick('register_verify_email');
+    try {
+      await verifyEmail(userId, fullCode);
+      navigate('/login', { state: { registered: true }, replace: true });
+    } catch (err) {
+      setError(extractApiError(err));
+      setCode(['', '', '', '', '', '']);
+      setTimeout(() => codeRefs.current[0]?.focus(), 0);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── Step 2: OTP input handlers ────────────────────────────────────────
+  function handleCodeInput(index: number, value: string) {
+    if (!/^\d*$/.test(value)) return;
+    const next = [...code];
+    next[index] = value.slice(-1);
+    setCode(next);
+    if (value && index < 5) {
+      codeRefs.current[index + 1]?.focus();
+    } else if (value && index === 5) {
+      doVerify(next.join(''));
+    }
+  }
+
+  function handleCodeKeyDown(index: number, e: React.KeyboardEvent) {
+    if (e.key === 'Backspace' && !code[index] && index > 0) {
+      codeRefs.current[index - 1]?.focus();
+    }
+  }
+
+  function handleCodePaste(e: React.ClipboardEvent) {
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length === 6) {
+      setCode(pasted.split(''));
+      codeRefs.current[5]?.focus();
+      doVerify(pasted);
+    }
+    e.preventDefault();
+  }
+
+  // ── Step 2: resend code ───────────────────────────────────────────────
+  const handleResend = async () => {
+    if (!userId) return;
+    setError('');
+    setCode(['', '', '', '', '', '']);
+    codeRefs.current[0]?.focus();
+    setIsLoading(true);
+    try {
+      const { data } = await api.post<{ message: string }>('/auth/resend-verification', { user_id: userId });
+      setSentMsg(data.message);
+    } catch (err) {
+      setError(extractApiError(err));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── Step 2 — OTP verification ─────────────────────────────────────────
+  if (step === 2) {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <div className="auth-header">
+            <div className="auth-logo-wrap">📧</div>
+            <h1 className="auth-title">Verify your email</h1>
+            <p className="auth-sub">{sentMsg || `We sent a 6-digit code to ${form.email}`}</p>
+          </div>
+
+          {error && <Alert type="error" message={error} />}
+
+          <form onSubmit={(e) => e.preventDefault()} className="auth-form">
+            <div className="form-group">
+              <label>Enter the 6-digit code</label>
+              <div className="otp-input-row" onPaste={handleCodePaste}>
+                {code.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => { codeRefs.current[i] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleCodeInput(i, e.target.value)}
+                    onKeyDown={(e) => handleCodeKeyDown(i, e)}
+                    className="otp-box"
+                    autoFocus={i === 0}
+                    autoComplete="off"
+                    disabled={isLoading}
+                  />
+                ))}
+              </div>
+              {isLoading && (
+                <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--color-primary)', fontWeight: 500 }}>
+                  <span className="btn-spinner" style={{ marginRight: '0.4rem' }} /> Verifying…
+                </p>
+              )}
+            </div>
+          </form>
+
+          <div className="otp-resend-row">
+            <span className="otp-resend-label">Didn't receive it?</span>
+            <button
+              type="button"
+              className="otp-resend-btn"
+              onClick={handleResend}
+              disabled={isLoading}
+            >
+              Resend code
+            </button>
+          </div>
+
+          <p className="auth-footer-text" style={{ marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              className="auth-link"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit' }}
+              onClick={() => { setStep(1); setError(''); setCode(['', '', '', '', '', '']); }}
+            >
+              ← Back to registration
+            </button>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 1 — registration form ────────────────────────────────────────
   return (
     <div className="auth-page" style={{ alignItems: 'flex-start', paddingTop: '3rem' }}>
       <div className="auth-card wide">
-        {/* Header */}
         <div className="auth-header">
           <div className="auth-logo-wrap">🏍️</div>
           <h1 className="auth-title">Create your account</h1>
           <p className="auth-sub">Join BodaBoda — fast motorcycle rides across the city</p>
         </div>
 
-        {/* Role selection cards */}
         <div className="role-cards">
           <button
             type="button"
@@ -132,7 +275,6 @@ export default function Register() {
         {error && <Alert type="error" message={error} />}
 
         <form onSubmit={handleSubmit} className="auth-form">
-          {/* Account details */}
           <div className="form-section-divider">
             <span className="form-section-label">Account Details</span>
           </div>
@@ -209,7 +351,6 @@ export default function Register() {
             </div>
           </div>
 
-          {/* Driver-only fields */}
           {role === 'DRIVER' && (
             <div className="driver-fields">
               <div className="form-section-divider">

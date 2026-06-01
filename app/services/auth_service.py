@@ -35,6 +35,8 @@ class AuthService:
             password_hash=hash_password(data.password),
             role=data.role,
             status=UserStatus.active,
+            auth_provider="local",
+            is_verified=False,
         )
         self.db.add(user)
         await self.db.flush()
@@ -68,7 +70,7 @@ class AuthService:
         )
         user = result.scalar_one_or_none()
 
-        if not user or not verify_password(data.password, user.password_hash):
+        if not user or not user.password_hash or not verify_password(data.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
@@ -78,6 +80,12 @@ class AuthService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account suspended",
+            )
+
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email before logging in",
             )
 
         payload: dict = {"sub": str(user.id), "role": user.role.value}

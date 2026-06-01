@@ -10,10 +10,12 @@ from app.schemas.profile import RiderProfileOut, DriverProfileOut
 class UserOut(BaseModel):
     id: int
     full_name: str
-    phone: str
+    phone: Optional[str]
     email: str
     role: UserRole
     status: UserStatus
+    auth_provider: str = "local"
+    is_verified: bool = False
     profile_image_url: Optional[str]
     created_at: datetime
     updated_at: datetime

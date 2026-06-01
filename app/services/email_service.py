@@ -12,6 +12,56 @@ logger = logging.getLogger("bodaboda.email")
 class EmailService:
 
     @staticmethod
+    async def send_verification_code(to_email: str, full_name: str, code: str) -> None:
+        if not settings.SMTP_HOST:
+            _log_code("EMAIL VERIFICATION", to_email, code)
+            return
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "BodaBoda — Verify Your Account"
+        msg["From"] = settings.SMTP_FROM
+        msg["To"] = to_email
+
+        plain = (
+            f"Hi {full_name},\n\n"
+            f"Your BodaBoda account verification code is:\n\n"
+            f"    {code}\n\n"
+            f"This code expires in 10 minutes.\n"
+            f"If you did not create an account, ignore this email.\n\n"
+            f"— BodaBoda Team"
+        )
+        html = f"""
+        <html><body style="font-family:Arial,sans-serif;max-width:480px;margin:auto">
+          <h2 style="color:#e85d04;">Verify Your BodaBoda Account</h2>
+          <p>Hi <strong>{full_name}</strong>,</p>
+          <p>Your verification code is:</p>
+          <div style="font-size:36px;font-weight:bold;letter-spacing:12px;
+                      padding:16px 24px;background:#f4f4f4;border-radius:8px;
+                      display:inline-block;margin:12px 0;">{code}</div>
+          <p>This code expires in <strong>10 minutes</strong>.</p>
+          <p style="color:#888;font-size:12px;">
+            If you did not create a BodaBoda account, ignore this email.
+          </p>
+        </body></html>
+        """
+        msg.attach(MIMEText(plain, "plain"))
+        msg.attach(MIMEText(html, "html"))
+
+        use_tls = settings.SMTP_PORT == 465
+        async with aiosmtplib.SMTP(
+            hostname=settings.SMTP_HOST,
+            port=settings.SMTP_PORT,
+            use_tls=use_tls,
+        ) as smtp:
+            if settings.SMTP_STARTTLS and not use_tls:
+                await smtp.starttls()
+            if settings.SMTP_USER:
+                await smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            await smtp.send_message(msg)
+
+        logger.info("Verification code email sent to %s", to_email)
+
+    @staticmethod
     async def send_reset_code(to_email: str, full_name: str, code: str) -> None:
         if not settings.SMTP_HOST:
             # ── Development fallback ──────────────────────────────────────────

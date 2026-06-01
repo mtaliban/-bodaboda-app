@@ -4,7 +4,6 @@ import { AxiosError } from 'axios';
 import api from '../api/axios';
 import Alert from '../components/Alert';
 import type {
-  ResetMethod,
   ForgotPasswordPayload,
   VerifyResetCodePayload,
   VerifyResetCodeResponse,
@@ -31,7 +30,6 @@ export default function ForgotPassword() {
 
   // step 1
   const [emailOrPhone, setEmailOrPhone] = useState('');
-  const [method, setMethod] = useState<ResetMethod>('email');
   const [sentMsg, setSentMsg] = useState('');
 
   // step 2
@@ -50,7 +48,7 @@ export default function ForgotPassword() {
     setError('');
     setLoading(true);
     try {
-      const payload: ForgotPasswordPayload = { email_or_phone: emailOrPhone, method };
+      const payload: ForgotPasswordPayload = { email_or_phone: emailOrPhone, method: 'email' };
       const { data } = await api.post<{ message: string }>('/auth/forgot-password', payload);
       setSentMsg(data.message);
       setStep(2);
@@ -109,7 +107,7 @@ export default function ForgotPassword() {
     codeRefs.current[0]?.focus();
     setLoading(true);
     try {
-      const payload: ForgotPasswordPayload = { email_or_phone: emailOrPhone, method };
+      const payload: ForgotPasswordPayload = { email_or_phone: emailOrPhone, method: 'email' };
       const { data } = await api.post<{ message: string }>('/auth/forgot-password', payload);
       setSentMsg(data.message);
     } catch (err) {
@@ -165,28 +163,9 @@ export default function ForgotPassword() {
                   required
                   autoComplete="username"
                 />
-              </div>
-
-              <div className="form-group">
-                <label>Send code via</label>
-                <div className="reset-method-group">
-                  <button
-                    type="button"
-                    className={`reset-method-btn${method === 'email' ? ' active' : ''}`}
-                    onClick={() => setMethod('email')}
-                  >
-                    <span className="reset-method-icon">✉️</span>
-                    <span className="reset-method-label">Email</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`reset-method-btn${method === 'sms' ? ' active' : ''}`}
-                    onClick={() => setMethod('sms')}
-                  >
-                    <span className="reset-method-icon">📱</span>
-                    <span className="reset-method-label">SMS</span>
-                  </button>
-                </div>
+                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.35rem' }}>
+                  The reset code will be sent to your registered email address.
+                </p>
               </div>
 
               <button

@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { trackApiCall } from '../metrics';
 
-const BASE_URL = 'http://localhost:8001';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -91,3 +91,19 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// ── Driver Service API (Service 2 — port 8002) ────────────────────────────────
+const DRIVER_URL = import.meta.env.VITE_DRIVER_SERVICE_URL || 'http://localhost:8002';
+
+export const driverApi = axios.create({
+  baseURL: DRIVER_URL,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+driverApi.interceptors.request.use((config: TimedConfig) => {
+  const token = localStorage.getItem('access_token');
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});

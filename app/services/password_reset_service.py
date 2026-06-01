@@ -10,11 +10,9 @@ from app.core.security import hash_password, hash_token
 from app.models.password_reset_token import PasswordResetToken, ResetMethod
 from app.models.user import User
 from app.services.email_service import EmailService
-from app.services.sms_service import SMSService
 
 _CODE_EXPIRY_MINUTES = 10
 _RESET_TOKEN_EXPIRY_MINUTES = 15
-_RATE_LIMIT_SECONDS = 60
 
 
 class PasswordResetService:
@@ -36,20 +34,16 @@ class PasswordResetService:
         if not user:
             return "If that account exists, a code has been sent"
 
-        # Rate limit: prevent spamming — one code per minute per user
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=_RATE_LIMIT_SECONDS)
-        recent = await self.db.execute(
+        # Invalidate previous unused reset codes
+        old = await self.db.execute(
             select(PasswordResetToken).where(
                 PasswordResetToken.user_id == user.id,
                 PasswordResetToken.is_used.is_(False),
-                PasswordResetToken.created_at > cutoff,
-            ).limit(1)
-        )
-        if recent.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Please wait 1 minute before requesting another reset code",
+                PasswordResetToken.is_verified.is_(False),
             )
+        )
+        for rec in old.scalars().all():
+            rec.is_used = True
 
         # Generate 6-digit code and store its hash
         code = f"{secrets.randbelow(1_000_000):06d}"
@@ -58,30 +52,21 @@ class PasswordResetService:
         record = PasswordResetToken(
             user_id=user.id,
             code_hash=hash_token(code),
-            method=method,
+            method=ResetMethod.EMAIL,
             expires_at=expires_at,
         )
         self.db.add(record)
         await self.db.commit()
 
-        # Deliver the code
+        # Always send via email (SMS not configured)
         try:
-            if method == ResetMethod.EMAIL:
-                await EmailService.send_reset_code(
-                    to_email=user.email,
-                    full_name=user.full_name,
-                    code=code,
-                )
-                masked = _mask_email(user.email)
-                return f"Reset code sent to {masked}"
-            else:
-                await SMSService.send_reset_code(
-                    phone=user.phone,
-                    full_name=user.full_name,
-                    code=code,
-                )
-                masked = _mask_phone(user.phone)
-                return f"Reset code sent to {masked}"
+            await EmailService.send_reset_code(
+                to_email=user.email,
+                full_name=user.full_name,
+                code=code,
+            )
+            masked = _mask_email(user.email)
+            return f"Reset code sent to {masked}"
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,

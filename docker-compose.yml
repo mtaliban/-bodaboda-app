@@ -16,6 +16,7 @@ services:
       retries: 5
     networks:
       - app_net
+    restart: unless-stopped
 
   mosquitto:
     image: eclipse-mosquitto:2.0
@@ -32,6 +33,8 @@ services:
     restart: unless-stopped
 
   driver_service:
+    build:
+      context: ./driver_service
     image: ${DOCKER_USERNAME}/bodaboda-driver:latest
     container_name: driver_service
     ports:
@@ -51,6 +54,8 @@ services:
     restart: unless-stopped
 
   auth_service:
+    build:
+      context: .
     image: ${DOCKER_USERNAME}/bodaboda-backend:latest
     ports:
       - "8001:8001"
@@ -72,8 +77,14 @@ services:
         condition: service_started
     networks:
       - app_net
+    restart: unless-stopped
 
   frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://${EC2_HOST:-localhost}:8001
+        VITE_DRIVER_SERVICE_URL: http://${EC2_HOST:-localhost}:8002
     image: ${DOCKER_USERNAME}/bodaboda-frontend:latest
     ports:
       - "5173:80"
@@ -81,6 +92,7 @@ services:
       - auth_service
     networks:
       - app_net
+    restart: unless-stopped
 
 volumes:
   postgres_data:

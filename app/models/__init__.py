@@ -8,6 +8,7 @@ from app.models.driver import Driver, DriverStatus
 from app.models.trip import Trip, TripStatus, RideType, PaymentMethod
 from app.models.driver_trip_offer import DriverTripOffer, OfferStatus
 from app.models.password_reset_token import PasswordResetToken, ResetMethod
+from app.models.email_verification import EmailVerification
 
 __all__ = [
     "User", "UserRole", "UserStatus",
@@ -20,4 +21,5 @@ __all__ = [
     "Trip", "TripStatus", "RideType", "PaymentMethod",
     "DriverTripOffer", "OfferStatus",
     "PasswordResetToken", "ResetMethod",
+    "EmailVerification",
 ]

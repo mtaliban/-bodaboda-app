@@ -47,7 +47,11 @@ class Trip(Base):
         BigInteger, ForeignKey("drivers.id"), nullable=True
     )
     pickup_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    pickup_lat: Mapped[Optional[float]] = mapped_column(nullable=True)
+    pickup_lng: Mapped[Optional[float]] = mapped_column(nullable=True)
     destination_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    destination_lat: Mapped[Optional[float]] = mapped_column(nullable=True)
+    destination_lng: Mapped[Optional[float]] = mapped_column(nullable=True)
     ride_type: Mapped[RideType] = mapped_column(
         SAEnum(RideType, name="ridetype"), nullable=False, default=RideType.BODA
     )

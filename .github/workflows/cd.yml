@@ -65,26 +65,34 @@ jobs:
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
             set -e
             cd /opt/bodaboda
+
+            echo "=== Pulling latest code ==="
             git pull origin main
 
-            echo "=== Stopping old containers ==="
-            docker stop $(docker ps -q) 2>/dev/null || true
-            docker rm $(docker ps -aq) 2>/dev/null || true
-
-            echo "=== Pulling images ==="
+            echo "=== Pulling new images ==="
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
 
-            echo "=== Starting staging stack ==="
-            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d
+            echo "=== Restarting stack ==="
+            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} EC2_HOST=${{ secrets.EC2_HOST }} \
+              docker compose down --remove-orphans
+            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} EC2_HOST=${{ secrets.EC2_HOST }} \
+              docker compose up -d
 
-            echo "=== Waiting for services ==="
-            sleep 15
+            echo "=== Waiting for services to start ==="
+            sleep 30
 
             echo "=== Health checks ==="
             curl -sf http://localhost:8001/health && echo "✅ Auth API OK" || (echo "❌ Auth API FAILED" && exit 1)
             curl -sf http://localhost:8002/health && echo "✅ Driver API OK" || (echo "❌ Driver API FAILED" && exit 1)
+
+            echo "=== MQTT broker check ==="
+            docker compose exec -T mosquitto mosquitto_pub \
+              -t rides/deploy/test \
+              -m '{"event_type":"DEPLOY_CHECK","status":"ok"}' \
+              -q 1 && echo "✅ MQTT OK" || echo "⚠️  MQTT check failed"
+
             echo "✅ Staging passed!"
           ENDSSH
 
@@ -121,4 +129,5 @@ jobs:
             echo "   Frontend  : http://${{ secrets.EC2_HOST }}:5173"
             echo "   Auth API  : http://${{ secrets.EC2_HOST }}:8001"
             echo "   Driver API: http://${{ secrets.EC2_HOST }}:8002"
+            echo "   MQTT WS   : ws://${{ secrets.EC2_HOST }}:9001"
           ENDSSH

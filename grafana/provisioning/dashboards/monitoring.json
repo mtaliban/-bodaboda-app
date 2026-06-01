@@ -1,995 +1,218 @@
 {
-  "__inputs": [],
-  "__requires": [],
-  "annotations": {
-    "list": []
-  },
-  "description": "BodaBoda full-stack monitoring \u2014 infrastructure, API traffic, per-endpoint breakdown, database, frontend",
-  "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 1,
-  "id": null,
-  "links": [],
-  "liveNow": false,
+  "uid": "bodaboda-monitoring",
+  "title": "BodaBoda — Monitoring",
+  "tags": ["bodaboda", "monitoring"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "schemaVersion": 36,
   "panels": [
+
+    { "id": 1, "type": "row", "title": "── System Health ──", "gridPos": {"h":1,"w":24,"x":0,"y":0}, "collapsed": false },
+
     {
-      "id": 1,
-      "type": "row",
-      "title": "\u2500\u2500 Infrastructure \u2500\u2500",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
+      "id": 2, "type": "stat", "title": "Backend Up",
+      "gridPos": {"h":3,"w":3,"x":0,"y":1},
+      "options": {"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"},
+      "fieldConfig": {"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"red","value":null},{"color":"green","value":1}]}}},
+      "targets": [{"datasource":"Prometheus","expr":"up{job=\"auth_service\"}","legendFormat":""}]
     },
     {
-      "id": 2,
-      "type": "timeseries",
-      "title": "CPU Usage (%)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 1,
-        "w": 12,
-        "h": 8
-      },
+      "id": 3, "type": "stat", "title": "Active Requests",
+      "gridPos": {"h":3,"w":3,"x":3,"y":1},
+      "options": {"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"},
+      "fieldConfig": {"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"yellow","value":5},{"color":"red","value":20}]}}},
+      "targets": [{"datasource":"Prometheus","expr":"sum(http_requests_inprogress{job=\"auth_service\"}) or vector(0)","legendFormat":""}]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Total Requests (30m)",
+      "gridPos": {"h":3,"w":3,"x":6,"y":1},
+      "options": {"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"},
+      "fieldConfig": {"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"blue","value":null}]}}},
+      "targets": [{"datasource":"Prometheus","expr":"sum(increase(http_request_size_bytes_count{job=\"auth_service\",handler!=\"/metrics\"}[30m]))","legendFormat":""}]
+    },
+    {
+      "id": 5, "type": "stat", "title": "Login Success (30m)",
+      "gridPos": {"h":3,"w":3,"x":9,"y":1},
+      "options": {"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"},
+      "fieldConfig": {"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null}]}}},
+      "targets": [{"datasource":"Prometheus","expr":"sum(increase(bodaboda_login_attempts_total{status=\"success\"}[30m])) or vector(0)","legendFormat":""}]
+    },
+    {
+      "id": 6, "type": "stat", "title": "Login Failed (30m)",
+      "gridPos": {"h":3,"w":3,"x":12,"y":1},
+      "options": {"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"},
+      "fieldConfig": {"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null},{"color":"yellow","value":5},{"color":"red","value":20}]}}},
+      "targets": [{"datasource":"Prometheus","expr":"sum(increase(bodaboda_login_attempts_total{status=\"failed\"}[30m])) or vector(0)","legendFormat":""}]
+    },
+    {
+      "id": 7, "type": "stat", "title": "Registrations (30m)",
+      "gridPos": {"h":3,"w":3,"x":15,"y":1},
+      "options": {"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"},
+      "fieldConfig": {"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null}]}}},
+      "targets": [{"datasource":"Prometheus","expr":"sum(increase(bodaboda_register_attempts_total{status=\"success\"}[30m])) or vector(0)","legendFormat":""}]
+    },
+    {
+      "id": 8, "type": "stat", "title": "DB Queries (30m)",
+      "gridPos": {"h":3,"w":3,"x":18,"y":1},
+      "options": {"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"},
+      "fieldConfig": {"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"blue","value":null}]}}},
+      "targets": [{"datasource":"Prometheus","expr":"sum(increase(bodaboda_db_query_duration_seconds_count[30m]))","legendFormat":""}]
+    },
+    {
+      "id": 9, "type": "stat", "title": "Active Users",
+      "gridPos": {"h":3,"w":3,"x":21,"y":1},
+      "options": {"reduceOptions":{"calcs":["lastNotNull"]},"colorMode":"background","graphMode":"none"},
+      "fieldConfig": {"defaults":{"color":{"mode":"thresholds"},"thresholds":{"mode":"absolute","steps":[{"color":"green","value":null}]}}},
+      "targets": [{"datasource":"Prometheus","expr":"bodaboda_active_users or vector(0)","legendFormat":""}]
+    },
+
+    { "id": 10, "type": "row", "title": "── API Traffic ──", "gridPos": {"h":1,"w":24,"x":0,"y":4}, "collapsed": false },
+
+    {
+      "id": 11, "type": "timeseries", "title": "Request Rate per Endpoint (req/min)",
+      "gridPos": {"h":8,"w":12,"x":0,"y":5},
+      "options": {"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}},
+      "fieldConfig": {"defaults":{"custom":{"lineWidth":2},"unit":"reqps"}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "label_replace(  label_replace(    rate(container_cpu_usage_seconds_total{image!=\"\", cpu=\"total\"}[2m]) * 100,    \"service\", \"$1\", \"image\", \".*/([^/:]+):[^:]*\"  ),  \"service\", \"$1\", \"service\", \"auth_user_service-(.*)\")",
-          "legendFormat": "{{service}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": true
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"sum by (handler) (rate(http_request_size_bytes_count{job=\"auth_service\", handler!=\"/metrics\"}[2m])) * 60","legendFormat":"{{handler}}"}
+      ]
     },
     {
-      "id": 3,
-      "type": "timeseries",
-      "title": "Memory Usage",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 1,
-        "w": 12,
-        "h": 8
-      },
+      "id": 12, "type": "timeseries", "title": "Login & Register Attempts (per min)",
+      "gridPos": {"h":8,"w":12,"x":12,"y":5},
+      "options": {"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}},
+      "fieldConfig": {"defaults":{"custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "label_replace(  label_replace(    container_memory_working_set_bytes{image!=\"\"},    \"service\", \"$1\", \"image\", \".*/([^/:]+):[^:]*\"  ),  \"service\", \"$1\", \"service\", \"auth_user_service-(.*)\")",
-          "legendFormat": "{{service}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": true
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"sum by (status) (rate(bodaboda_login_attempts_total[2m])) * 60","legendFormat":"login {{status}}"},
+        {"datasource":"Prometheus","expr":"sum by (status) (rate(bodaboda_register_attempts_total[2m])) * 60","legendFormat":"register {{status}}"}
+      ]
     },
     {
-      "id": 4,
-      "type": "timeseries",
-      "title": "Network Received (bytes/s)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 9,
-        "w": 12,
-        "h": 8
-      },
+      "id": 13, "type": "timeseries", "title": "Response Bytes per Endpoint (bytes/s)",
+      "gridPos": {"h":8,"w":12,"x":0,"y":13},
+      "options": {"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}},
+      "fieldConfig": {"defaults":{"unit":"bytes","custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "rate(node_network_receive_bytes_total{device!=\"lo\", device!~\"veth.+|br-.+|docker.+\"}[1m])",
-          "legendFormat": "{{device}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": true
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"sum by (handler) (rate(http_response_size_bytes_sum{job=\"auth_service\", handler!=\"/metrics\"}[2m]))","legendFormat":"{{handler}}"}
+      ]
     },
     {
-      "id": 5,
-      "type": "timeseries",
-      "title": "Network Transmitted (bytes/s)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 9,
-        "w": 12,
-        "h": 8
-      },
+      "id": 14, "type": "timeseries", "title": "Active In-Flight Requests per Endpoint",
+      "gridPos": {"h":8,"w":12,"x":12,"y":13},
+      "options": {"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"bottom","calcs":["lastNotNull","max"]}},
+      "fieldConfig": {"defaults":{"custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "rate(node_network_transmit_bytes_total{device!=\"lo\", device!~\"veth.+|br-.+|docker.+\"}[1m])",
-          "legendFormat": "{{device}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": true
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"http_requests_inprogress{job=\"auth_service\"}","legendFormat":"{{handler}} [{{method}}]"}
+      ]
     },
+
+    { "id": 15, "type": "row", "title": "── Database ──", "gridPos": {"h":1,"w":24,"x":0,"y":21}, "collapsed": false },
+
     {
-      "id": 6,
-      "type": "row",
-      "title": "\u2500\u2500 API Overview \u2500\u2500",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 17,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 7,
-      "type": "stat",
-      "title": "Active Requests (now)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 18,
-        "w": 6,
-        "h": 4
-      },
+      "id": 16, "type": "timeseries", "title": "DB Query Duration p50 / p95 (ms)",
+      "gridPos": {"h":8,"w":12,"x":0,"y":22},
+      "options": {"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}},
+      "fieldConfig": {"defaults":{"unit":"ms","custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(http_requests_inprogress{job=\"auth_service\"}) or vector(0)",
-          "legendFormat": "",
-          "instant": true
-        }
-      ],
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 10
-              },
-              {
-                "color": "red",
-                "value": 50
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"histogram_quantile(0.50, sum by (le,operation) (rate(bodaboda_db_query_duration_seconds_bucket[2m]))) * 1000","legendFormat":"p50 {{operation}}"},
+        {"datasource":"Prometheus","expr":"histogram_quantile(0.95, sum by (le,operation) (rate(bodaboda_db_query_duration_seconds_bucket[2m]))) * 1000","legendFormat":"p95 {{operation}}"}
+      ]
     },
     {
-      "id": 8,
-      "type": "stat",
-      "title": "Active Users (now)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 6,
-        "y": 18,
-        "w": 6,
-        "h": 4
-      },
+      "id": 17, "type": "timeseries", "title": "DB Query Rate (queries/min)",
+      "gridPos": {"h":8,"w":12,"x":12,"y":22},
+      "options": {"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}},
+      "fieldConfig": {"defaults":{"custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "bodaboda_active_users or vector(0)",
-          "legendFormat": "",
-          "instant": true
-        }
-      ],
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "blue",
-                "value": 1
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"sum by (operation) (rate(bodaboda_db_query_duration_seconds_count[2m])) * 60","legendFormat":"{{operation}}"}
+      ]
     },
+
+    { "id": 18, "type": "row", "title": "── Container Resources ──", "gridPos": {"h":1,"w":24,"x":0,"y":30}, "collapsed": false },
+
     {
-      "id": 9,
-      "type": "stat",
-      "title": "Successful Logins (1 h)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 18,
-        "w": 6,
-        "h": 4
-      },
+      "id": 19, "type": "timeseries", "title": "CPU Usage per Container (%)",
+      "gridPos": {"h":8,"w":12,"x":0,"y":31},
+      "options": {"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}},
+      "fieldConfig": {"defaults":{"unit":"percent","custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(increase(bodaboda_login_attempts_total{status=\"success\"}[1h])) or vector(0)",
-          "legendFormat": "",
-          "instant": true
-        }
-      ],
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"label_replace(label_replace(rate(container_cpu_usage_seconds_total{image!=\"\",cpu=\"total\"}[2m])*100,\"service\",\"$1\",\"image\",\".*/([^/:]+):[^:]*\"),\"service\",\"$1\",\"service\",\"auth_user_service-(.*)\")","legendFormat":"{{service}}"}
+      ]
     },
     {
-      "id": 10,
-      "type": "stat",
-      "title": "Registrations (1 h)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 18,
-        "y": 18,
-        "w": 6,
-        "h": 4
-      },
+      "id": 20, "type": "timeseries", "title": "Memory Usage per Container (MB)",
+      "gridPos": {"h":8,"w":12,"x":12,"y":31},
+      "options": {"tooltip":{"mode":"multi"},"legend":{"displayMode":"table","placement":"bottom","calcs":["mean","max"]}},
+      "fieldConfig": {"defaults":{"unit":"decmbytes","custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(increase(bodaboda_register_attempts_total{status=\"success\"}[1h])) or vector(0)",
-          "legendFormat": "",
-          "instant": true
-        }
-      ],
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "auto",
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"label_replace(label_replace(container_memory_working_set_bytes{image!=\"\"},\"service\",\"$1\",\"image\",\".*/([^/:]+):[^:]*\"),\"service\",\"$1\",\"service\",\"auth_user_service-(.*)\") / 1024 / 1024","legendFormat":"{{service}}"}
+      ]
     },
+
+    { "id": 21, "type": "row", "title": "── Host Machine ──", "gridPos": {"h":1,"w":24,"x":0,"y":39}, "collapsed": false },
+
     {
-      "id": 11,
-      "type": "timeseries",
-      "title": "Request Rate by Endpoint  (req / min)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 22,
-        "w": 12,
-        "h": 8
-      },
+      "id": 22, "type": "timeseries", "title": "Host CPU Usage (%)",
+      "gridPos": {"h":8,"w":8,"x":0,"y":40},
+      "options": {"legend":{"displayMode":"list","placement":"bottom"}},
+      "fieldConfig": {"defaults":{"unit":"percent","max":100,"custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (handler) (rate(http_request_size_bytes_count{job=\"auth_service\", handler!=\"/metrics\", method!=\"OPTIONS\"}[5m])) * 60 > 0",
-          "legendFormat": "{{handler}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[2m])) * 100)","legendFormat":"CPU %"}
+      ]
     },
     {
-      "id": 12,
-      "type": "timeseries",
-      "title": "Login & Register Attempts",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 22,
-        "w": 12,
-        "h": 8
-      },
+      "id": 23, "type": "timeseries", "title": "Host Memory (MB)",
+      "gridPos": {"h":8,"w":8,"x":8,"y":40},
+      "options": {"legend":{"displayMode":"list","placement":"bottom"}},
+      "fieldConfig": {"defaults":{"unit":"decmbytes","custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (status) (rate(bodaboda_login_attempts_total[5m])) * 60",
-          "legendFormat": "Login {{status}}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by (status) (rate(bodaboda_register_attempts_total[5m])) * 60",
-          "legendFormat": "Register {{status}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": true
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024","legendFormat":"Used MB"},
+        {"datasource":"Prometheus","expr":"node_memory_MemAvailable_bytes / 1024 / 1024","legendFormat":"Free MB"}
+      ]
     },
     {
-      "id": 13,
-      "type": "timeseries",
-      "title": "DB Query Time  p50 / p95  (ms)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 30,
-        "w": 24,
-        "h": 8
-      },
+      "id": 24, "type": "timeseries", "title": "Network Traffic (bytes/s)",
+      "gridPos": {"h":8,"w":8,"x":16,"y":40},
+      "options": {"legend":{"displayMode":"list","placement":"bottom"}},
+      "fieldConfig": {"defaults":{"unit":"bytes","custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.50, sum by (le, operation) (rate(bodaboda_db_query_duration_seconds_bucket[2m]))) * 1000",
-          "legendFormat": "p50 {{operation}}"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(bodaboda_db_query_duration_seconds_bucket[2m]))) * 1000",
-          "legendFormat": "p95 {{operation}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": true
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"rate(node_network_receive_bytes_total{device!=\"lo\",device!~\"veth.+|br-.+|docker.+\"}[2m])","legendFormat":"↓ {{device}}"},
+        {"datasource":"Prometheus","expr":"rate(node_network_transmit_bytes_total{device!=\"lo\",device!~\"veth.+|br-.+|docker.+\"}[2m])","legendFormat":"↑ {{device}}"}
+      ]
     },
+
+    { "id": 25, "type": "row", "title": "── Backend Process ──", "gridPos": {"h":1,"w":24,"x":0,"y":48}, "collapsed": false },
+
     {
-      "id": 14,
-      "type": "row",
-      "title": "\u2500\u2500 Per-Endpoint Traffic \u2500\u2500",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 38,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 15,
-      "type": "timeseries",
-      "title": "Request Rate per Endpoint  (req / min)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 39,
-        "w": 12,
-        "h": 8
-      },
+      "id": 26, "type": "timeseries", "title": "Backend Process CPU (s/s)",
+      "gridPos": {"h":8,"w":8,"x":0,"y":49},
+      "options": {"legend":{"displayMode":"list","placement":"bottom"}},
+      "fieldConfig": {"defaults":{"custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (handler) (rate(http_request_size_bytes_count{job=\"auth_service\", handler!=\"/metrics\", method!=\"OPTIONS\"}[5m])) * 60 > 0",
-          "legendFormat": "{{handler}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"rate(process_cpu_seconds_total{job=\"auth_service\"}[2m])","legendFormat":"CPU s/s"}
+      ]
     },
     {
-      "id": 16,
-      "type": "timeseries",
-      "title": "Active In-Flight Requests per Endpoint",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 39,
-        "w": 12,
-        "h": 8
-      },
+      "id": 27, "type": "timeseries", "title": "Backend Memory RSS (MB)",
+      "gridPos": {"h":8,"w":8,"x":8,"y":49},
+      "options": {"legend":{"displayMode":"list","placement":"bottom"}},
+      "fieldConfig": {"defaults":{"unit":"decmbytes","custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "http_requests_inprogress{job=\"auth_service\", handler=~\".+\", method!=\"OPTIONS\"} > 0",
-          "legendFormat": "{{handler}}  [{{method}}]"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"process_resident_memory_bytes{job=\"auth_service\"} / 1024 / 1024","legendFormat":"RSS MB"}
+      ]
     },
     {
-      "id": 17,
-      "type": "timeseries",
-      "title": "Bytes Received per Endpoint  (bytes / s)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 47,
-        "w": 12,
-        "h": 8
-      },
+      "id": 28, "type": "timeseries", "title": "Open File Descriptors",
+      "gridPos": {"h":8,"w":8,"x":16,"y":49},
+      "options": {"legend":{"displayMode":"list","placement":"bottom"}},
+      "fieldConfig": {"defaults":{"custom":{"lineWidth":2}}},
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (handler) (rate(http_request_size_bytes_sum{job=\"auth_service\", handler!=\"/metrics\", method!=\"OPTIONS\"}[5m])) > 0",
-          "legendFormat": "{{handler}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 18,
-      "type": "timeseries",
-      "title": "Bytes Sent per Endpoint  (bytes / s)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 47,
-        "w": 12,
-        "h": 8
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (handler) (rate(http_response_size_bytes_sum{job=\"auth_service\", handler!=\"/metrics\", method!=\"OPTIONS\"}[5m])) > 0",
-          "legendFormat": "{{handler}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 19,
-      "type": "row",
-      "title": "\u2500\u2500 Frontend \u2500\u2500",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 55,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 20,
-      "type": "timeseries",
-      "title": "Page Views / min",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 56,
-        "w": 8,
-        "h": 8
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (page) (rate(bodaboda_frontend_page_loads_total[5m])) * 60 > 0",
-          "legendFormat": "{{page}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 21,
-      "type": "timeseries",
-      "title": "Button Clicks / min",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 8,
-        "y": 56,
-        "w": 8,
-        "h": 8
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum by (button) (rate(bodaboda_frontend_button_clicks_total[5m])) * 60 > 0",
-          "legendFormat": "{{button}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
-    },
-    {
-      "id": 22,
-      "type": "timeseries",
-      "title": "Browser API Round-Trip Time  p50 / p95  (ms)",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "gridPos": {
-        "x": 16,
-        "y": 56,
-        "w": 8,
-        "h": 8
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.50, sum by (le, endpoint) (rate(bodaboda_frontend_api_duration_seconds_bucket[5m]))) * 1000",
-          "legendFormat": "p50 {{endpoint}}"
-        },
-        {
-          "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le, endpoint) (rate(bodaboda_frontend_api_duration_seconds_bucket[5m]))) * 1000",
-          "legendFormat": "p95 {{endpoint}}"
-        }
-      ],
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "spanNulls": false
-          },
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      }
+        {"datasource":"Prometheus","expr":"process_open_fds{job=\"auth_service\"}","legendFormat":"open FDs"}
+      ]
     }
   ],
-  "refresh": "10s",
-  "schemaVersion": 38,
-  "tags": [
-    "bodaboda",
-    "monitoring"
-  ],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-30m",
-    "to": "now"
-  },
-  "timepicker": {},
-  "timezone": "browser",
-  "title": "BodaBoda \u2014 Monitoring",
-  "uid": "bodaboda-monitoring",
-  "version": 3
+  "templating": {"list": []},
+  "annotations": {"list": []},
+  "links": []
 }

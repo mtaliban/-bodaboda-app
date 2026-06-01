@@ -11,6 +11,7 @@ from app.models.trip_status_history import TripStatusHistory, ChangedBy
 from app.models.user import User, UserRole
 from app.schemas.trip import TripRequest
 from app.services.driver_service import DriverService
+from app.services.mqtt_service import publish_ride_requested, publish_ride_status
 from app.services.notification_service import NotificationService
 
 _ACTIVE_STATUSES = {
@@ -102,7 +103,11 @@ class TripService:
             rider_id=rider_profile_id,
             driver_id=None,
             pickup_address=data.pickup_address.strip(),
+            pickup_lat=data.pickup_lat,
+            pickup_lng=data.pickup_lng,
             destination_address=data.destination_address.strip(),
+            destination_lat=data.destination_lat,
+            destination_lng=data.destination_lng,
             ride_type=data.ride_type,
             payment_method=data.payment_method,
             status=TripStatus.SEARCHING_DRIVER,
@@ -137,6 +142,21 @@ class TripService:
 
         await self.db.commit()
         await self.db.refresh(trip)
+
+        # Publish MQTT event — drivers receive this instantly
+        await publish_ride_requested({
+            "trip_id":             trip.id,
+            "rider_id":            trip.rider_id,
+            "pickup_address":      trip.pickup_address,
+            "pickup_lat":          trip.pickup_lat,
+            "pickup_lng":          trip.pickup_lng,
+            "destination_address": trip.destination_address,
+            "destination_lat":     trip.destination_lat,
+            "destination_lng":     trip.destination_lng,
+            "ride_type":           trip.ride_type.value,
+            "payment_method":      trip.payment_method.value,
+        })
+
         return trip
 
     async def get_rider_trips(self, user: User) -> list[Trip]:

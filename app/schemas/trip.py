@@ -24,7 +24,11 @@ TRIP_STATUS_MESSAGES: dict[TripStatus, str] = {
 
 class TripRequest(BaseModel):
     pickup_address: str
+    pickup_lat: Optional[float] = None
+    pickup_lng: Optional[float] = None
     destination_address: str
+    destination_lat: Optional[float] = None
+    destination_lng: Optional[float] = None
     ride_type: RideType = RideType.BODA
     payment_method: PaymentMethod = PaymentMethod.CASH
 
@@ -58,7 +62,11 @@ class TripOut(BaseModel):
     rider_id: int
     driver_id: Optional[int] = None
     pickup_address: str
+    pickup_lat: Optional[float] = None
+    pickup_lng: Optional[float] = None
     destination_address: str
+    destination_lat: Optional[float] = None
+    destination_lng: Optional[float] = None
     ride_type: RideType
     payment_method: PaymentMethod
     status: TripStatus
@@ -99,7 +107,11 @@ def build_trip_out(trip: "Trip") -> TripOut:
         rider_id=trip.rider_id,
         driver_id=trip.driver_id,
         pickup_address=trip.pickup_address,
+        pickup_lat=trip.pickup_lat,
+        pickup_lng=trip.pickup_lng,
         destination_address=trip.destination_address,
+        destination_lat=trip.destination_lat,
+        destination_lng=trip.destination_lng,
         ride_type=trip.ride_type,
         payment_method=trip.payment_method,
         status=trip.status,

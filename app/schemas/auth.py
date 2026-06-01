@@ -23,6 +23,11 @@ class RegisterRequest(BaseModel):
         return self
 
 
+class RegisterResponse(BaseModel):
+    message: str
+    user_id: int
+
+
 class LoginRequest(BaseModel):
     email_or_phone: str
     password: str
@@ -50,6 +55,52 @@ class LogoutRequest(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+# ── Email verification ────────────────────────────────────────────────────────
+
+class VerifyEmailRequest(BaseModel):
+    user_id: int
+    code: str
+
+
+class ResendVerificationRequest(BaseModel):
+    user_id: int
+
+
+# ── Social auth ───────────────────────────────────────────────────────────────
+
+class SocialDriverProfile(BaseModel):
+    license_number: str
+    vehicle_model: str
+    plate_number: str
+
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str
+    role: UserRole = UserRole.RIDER
+    phone: Optional[str] = None
+    driver_profile: Optional[SocialDriverProfile] = None
+
+    @model_validator(mode="after")
+    def check_driver(self) -> "GoogleAuthRequest":
+        if self.role == UserRole.DRIVER and not self.driver_profile:
+            raise ValueError("driver_profile is required when role is DRIVER")
+        return self
+
+
+class AppleAuthRequest(BaseModel):
+    identity_token: str
+    full_name: Optional[str] = None
+    role: UserRole = UserRole.RIDER
+    phone: Optional[str] = None
+    driver_profile: Optional[SocialDriverProfile] = None
+
+    @model_validator(mode="after")
+    def check_driver(self) -> "AppleAuthRequest":
+        if self.role == UserRole.DRIVER and not self.driver_profile:
+            raise ValueError("driver_profile is required when role is DRIVER")
+        return self
 
 
 # ── Password reset ────────────────────────────────────────────────────────────

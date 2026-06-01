@@ -43,7 +43,6 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        {/* Header */}
         <div className="auth-header">
           <div className="auth-logo-wrap">🏍️</div>
           <h1 className="auth-title">Welcome back</h1>
