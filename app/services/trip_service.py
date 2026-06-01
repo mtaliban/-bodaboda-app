@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,7 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.driver import Driver, DriverStatus
 from app.models.driver_profile import DriverProfile
-from app.models.driver_trip_offer import DriverTripOffer
+from app.models.driver_trip_offer import DriverTripOffer, OfferStatus
 from app.models.trip import Trip, TripStatus
 from app.models.trip_status_history import TripStatusHistory, ChangedBy
 from app.models.user import User, UserRole
@@ -44,11 +46,33 @@ class TripService:
                 Trip.status.in_(list(_ACTIVE_STATUSES)),
             ).limit(1)
         )
-        if result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=400,
-                detail="You already have an active trip",
+        trip = result.scalar_one_or_none()
+        if not trip:
+            return
+
+        # If still searching but all offers expired → auto-expire the trip so rider can retry
+        if trip.status == TripStatus.SEARCHING_DRIVER:
+            offers_result = await self.db.execute(
+                select(DriverTripOffer).where(
+                    DriverTripOffer.trip_id == trip.id,
+                    DriverTripOffer.status == OfferStatus.OFFERED,
+                    DriverTripOffer.expires_at > datetime.now(timezone.utc),
+                )
             )
+            if not offers_result.scalar_one_or_none():
+                trip.status = TripStatus.NO_DRIVER_AVAILABLE
+                self.db.add(TripStatusHistory(
+                    trip_id=trip.id,
+                    status=TripStatus.NO_DRIVER_AVAILABLE.value,
+                    changed_by=ChangedBy.SYSTEM,
+                ))
+                await self.db.commit()
+                return
+
+        raise HTTPException(
+            status_code=400,
+            detail="You already have an active trip",
+        )
 
     async def _get_driver_and_assigned_trip(
         self, user: User, trip_id: int
