@@ -57,22 +57,6 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/ec2_key
           chmod 600 ~/.ssh/ec2_key
 
-      - name: Debug SSH key
-        run: |
-          echo "Key first line:"
-          head -1 ~/.ssh/ec2_key
-          echo "Key last line:"
-          tail -1 ~/.ssh/ec2_key
-          echo "Key length (chars):"
-          wc -c < ~/.ssh/ec2_key
-          echo "Testing SSH connection..."
-          ssh -i ~/.ssh/ec2_key \
-            -o StrictHostKeyChecking=no \
-            -o IdentitiesOnly=yes \
-            -o ConnectTimeout=10 \
-            -v \
-            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo SSH_OK" 2>&1 | tail -20
-
       - name: Deploy to staging
         run: |
           ssh -i ~/.ssh/ec2_key \
@@ -83,14 +67,21 @@ jobs:
             cd /opt/bodaboda
             git pull origin main
 
+            echo "=== Disk space before cleanup ==="
+            df -h /
+
+            echo "=== Cleaning Docker cache ==="
+            docker stop $(docker ps -q) 2>/dev/null || true
+            docker rm $(docker ps -aq) 2>/dev/null || true
+            docker system prune -af --volumes 2>/dev/null || true
+
+            echo "=== Disk space after cleanup ==="
+            df -h /
+
             echo "=== Pulling new images ==="
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
-
-            echo "=== Stopping old containers ==="
-            docker stop $(docker ps -q) 2>/dev/null || true
-            docker rm $(docker ps -aq) 2>/dev/null || true
 
             echo "=== Starting stack ==="
             DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d
