@@ -3961,3 +3961,7 @@ button.edit-back {
 [data-theme="dark"] input::placeholder { color: #6B7280; }
 [data-theme="dark"] .tab-page,
 [data-theme="dark"] .page-wrap       { background: #111827; }
+
+/* Driver trip map */
+.driver-trip-map { height: 220px; border-radius: 10px; overflow: hidden; margin: 0.75rem 0; }
+@media (min-width: 640px) { .driver-trip-map { height: 280px; } }

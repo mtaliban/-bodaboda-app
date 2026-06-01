@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import Alert from '../components/Alert';
 import { useMqtt } from '../hooks/useMqtt';
+import { DriverTripMapSafe } from '../components/DriverTripMap';
 
 interface DriverState {
   id: number;
@@ -18,7 +19,11 @@ interface DriverState {
 interface TripSummary {
   id: number;
   pickup_address: string;
+  pickup_lat?: number;
+  pickup_lng?: number;
   destination_address: string;
+  destination_lat?: number;
+  destination_lng?: number;
   ride_type: string;
   payment_method: string;
   status: string;
@@ -29,7 +34,16 @@ interface Offer {
   trip_id: number;
   status: string;
   expires_at: string;
+  rider_name?: string;
+  rider_phone?: string;
   trip: TripSummary | null;
+}
+
+interface ChatMessage {
+  id: string;
+  sender: string;
+  text: string;
+  time: string;
 }
 
 function StatusDot({ status }: { status: string }) {
@@ -65,6 +79,13 @@ export default function DriverDashboard() {
   const [acting, setActing] = useState(false);
   const [error, setError] = useState('');
   const [newRideAlert, setNewRideAlert] = useState(false);
+
+  // Chat state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -110,14 +131,49 @@ export default function DriverDashboard() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [offer]);
 
-  // ── MQTT: listen for new ride requests ──────────────────────────────────
-  const mqttTopics = ['rides/new'];
-  useMqtt(mqttTopics, useCallback(() => {
+  // ── auto-scroll chat ────────────────────────────────────────────────────
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // ── MQTT: listen for new ride requests and chat messages ─────────────────
+  const mqttTopics = ['rides/new', offer ? `rides/${offer.trip_id}/chat` : 'rides/__none__'];
+  const { publish } = useMqtt(mqttTopics, useCallback((event) => {
+    if (event.event_type === 'CHAT_MESSAGE') {
+      const p = event.payload as { sender?: string; text?: string };
+      if (p.sender !== 'Driver') {
+        const newMsg: ChatMessage = {
+          id: Date.now().toString() + Math.random(),
+          sender: p.sender ?? 'Rider',
+          text: String(p.text ?? ''),
+          time: new Date().toLocaleTimeString(),
+        };
+        setMessages(prev => [...prev, newMsg]);
+      }
+      return;
+    }
+    // New ride alert
     setNewRideAlert(true);
     setTimeout(() => setNewRideAlert(false), 5000);
-    // Immediately poll for an offer directed at this driver
     if (driver?.status === 'AVAILABLE') fetchOffer();
-  }, [driver?.status, fetchOffer]));
+  }, [driver?.status, fetchOffer, offer]));
+
+  // ── send chat message ───────────────────────────────────────────────────
+  const sendChat = () => {
+    if (!chatInput.trim() || !offer) return;
+    const msg: ChatMessage = {
+      id: Date.now().toString(),
+      sender: 'Driver',
+      text: chatInput.trim(),
+      time: new Date().toLocaleTimeString(),
+    };
+    setMessages(prev => [...prev, msg]);
+    publish(`rides/${offer.trip_id}/chat`, {
+      event_type: 'CHAT_MESSAGE',
+      payload: { sender: 'Driver', text: chatInput.trim(), trip_id: offer.trip_id },
+    });
+    setChatInput('');
+  };
 
   // ── go online / offline ─────────────────────────────────────────────────
   const toggleOnline = async () => {
@@ -241,6 +297,22 @@ export default function DriverDashboard() {
                 ⏱ {timer}
               </span>
             </div>
+
+            {/* Rider contact row */}
+            {(offer.rider_name || offer.rider_phone) && (
+              <div className="info-row" style={{ marginTop: '0.5rem' }}>
+                <span className="info-label">Rider</span>
+                <span className="info-value" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  {offer.rider_name && <strong>{offer.rider_name}</strong>}
+                  {offer.rider_phone && (
+                    <a href={`tel:${offer.rider_phone}`} style={{ color: '#e85d04', fontWeight: 700, textDecoration: 'none' }}>
+                      📞 {offer.rider_phone}
+                    </a>
+                  )}
+                </span>
+              </div>
+            )}
+
             <div className="info-body">
               <div className="info-row">
                 <span className="info-label">Pickup</span>
@@ -259,6 +331,18 @@ export default function DriverDashboard() {
                 <span className="info-value">{offer.trip.payment_method}</span>
               </div>
             </div>
+
+            {/* Map */}
+            <DriverTripMapSafe
+              pickupLat={offer.trip.pickup_lat}
+              pickupLng={offer.trip.pickup_lng}
+              pickupAddress={offer.trip.pickup_address}
+              destinationLat={offer.trip.destination_lat}
+              destinationLng={offer.trip.destination_lng}
+              destinationAddress={offer.trip.destination_address}
+            />
+
+            {/* Action buttons */}
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
               <button
                 className="btn btn-primary"
@@ -275,6 +359,13 @@ export default function DriverDashboard() {
                 disabled={acting}
               >
                 {acting ? '…' : '✕ Decline'}
+              </button>
+              <button
+                className="btn btn-navy"
+                style={{ minWidth: 60 }}
+                onClick={() => setChatOpen(true)}
+              >
+                💬 Chat
               </button>
             </div>
           </div>
@@ -348,6 +439,78 @@ export default function DriverDashboard() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* ── Chat backdrop ── */}
+      {chatOpen && (
+        <div
+          onClick={() => setChatOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 999 }}
+        />
+      )}
+
+      {/* ── Chat panel (right-side slide) ── */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        right: chatOpen ? 0 : '-100%',
+        width: 'min(340px, 100vw)',
+        height: '100vh',
+        background: '#fff',
+        boxShadow: '-4px 0 24px rgba(0,0,0,0.18)',
+        transition: 'right 0.3s ease',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '1rem', background: '#1e3a5f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>💬 Chat with {offer?.rider_name ?? 'Rider'}</span>
+          <button
+            onClick={() => setChatOpen(false)}
+            style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.3rem', cursor: 'pointer' }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {messages.length === 0 && (
+            <p style={{ color: '#94a3b8', textAlign: 'center', marginTop: '2rem' }}>No messages yet</p>
+          )}
+          {messages.map(m => (
+            <div
+              key={m.id}
+              style={{
+                alignSelf: m.sender === 'Driver' ? 'flex-end' : 'flex-start',
+                background: m.sender === 'Driver' ? '#e85d04' : '#f1f5f9',
+                color: m.sender === 'Driver' ? '#fff' : '#1e293b',
+                padding: '0.5rem 0.75rem',
+                borderRadius: m.sender === 'Driver' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                maxWidth: '80%',
+                fontSize: '0.9rem',
+              }}
+            >
+              <div>{m.text}</div>
+              <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>{m.time}</div>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input */}
+        <div style={{ padding: '0.75rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem' }}>
+          <input
+            type="text"
+            value={chatInput}
+            onChange={e => setChatInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendChat()}
+            placeholder="Type a message…"
+            style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem' }}
+          />
+          <button onClick={sendChat} className="btn btn-primary btn-sm">Send</button>
+        </div>
       </div>
     </div>
   );

@@ -1,10 +1,12 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.deps import get_current_user
+from app.models.rider_profile import RiderProfile
 from app.models.user import User
 from app.schemas.driver import DriverOut, OfferOut, AcceptOfferResponse, DeclineOfferResponse
 from app.schemas.trip import TripOut, build_trip_out
@@ -74,7 +76,27 @@ async def get_current_offer(
     offer = await svc.get_current_offer(current_user)
     if offer is None:
         return None
-    return OfferOut.model_validate(offer)
+
+    offer_out = OfferOut.model_validate(offer)
+
+    # Enrich with rider contact info
+    if offer.trip is not None:
+        rider_id = offer.trip.rider_id
+        # rider_id on Trip references rider_profiles.id
+        rider_profile_result = await db.execute(
+            select(RiderProfile).where(RiderProfile.id == rider_id)
+        )
+        rider_profile = rider_profile_result.scalar_one_or_none()
+        if rider_profile is not None:
+            user_result = await db.execute(
+                select(User).where(User.id == rider_profile.user_id)
+            )
+            rider_user = user_result.scalar_one_or_none()
+            if rider_user is not None:
+                offer_out.rider_name = rider_user.full_name
+                offer_out.rider_phone = rider_user.phone
+
+    return offer_out
 
 
 @router.get("/offers/history", response_model=list[OfferOut])

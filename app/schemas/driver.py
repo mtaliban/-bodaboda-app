@@ -43,7 +43,11 @@ class DriverOut(BaseModel):
 class OfferTripSummary(BaseModel):
     id: int
     pickup_address: str
+    pickup_lat: Optional[float] = None
+    pickup_lng: Optional[float] = None
     destination_address: str
+    destination_lat: Optional[float] = None
+    destination_lng: Optional[float] = None
     ride_type: RideType
     payment_method: PaymentMethod
     status: TripStatus
@@ -60,6 +64,8 @@ class OfferOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     trip: Optional[OfferTripSummary] = None
+    rider_name: Optional[str] = None
+    rider_phone: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
