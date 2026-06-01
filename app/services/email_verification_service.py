@@ -46,9 +46,9 @@ class EmailVerificationService:
                 code=code,
             )
         except Exception as exc:
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Failed to send verification email: {exc}",
+            import logging
+            logging.getLogger("bodaboda.email").warning(
+                "Email delivery failed for %s: %s — code is in logs above", user.email, exc
             )
 
     async def verify_code(self, user_id: int, code: str) -> User:

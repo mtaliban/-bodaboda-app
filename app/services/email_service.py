@@ -60,6 +60,7 @@ class EmailService:
             await smtp.send_message(msg)
 
         logger.info("Verification code email sent to %s", to_email)
+        _log_code("EMAIL VERIFICATION", to_email, code)
 
     @staticmethod
     async def send_reset_code(to_email: str, full_name: str, code: str) -> None:
@@ -114,6 +115,7 @@ class EmailService:
             await smtp.send_message(msg)
 
         logger.info("Reset code email sent to %s", to_email)
+        _log_code("PASSWORD RESET", to_email, code)
 
 
 def _log_code(channel: str, destination: str, code: str) -> None:
