@@ -16,14 +16,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Compute the sslip.io domain from the EC2 IP (dots → dashes).
-      # e.g. 3.85.53.81 → 3-85-53-81.sslip.io
-      # Caddy uses this domain to get a real Let's Encrypt certificate.
-      - name: Compute sslip.io domain
-        run: |
-          EC2_DOMAIN=$(echo '${{ secrets.EC2_HOST }}' | tr '.' '-').sslip.io
-          echo "EC2_DOMAIN=$EC2_DOMAIN" >> $GITHUB_ENV
-
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -44,28 +36,18 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
 
-      # Frontend build — VITE_API_BASE_URL is optional (app falls back to
-      # window.location.origin at runtime), but setting it avoids any edge cases.
       - name: Build and push frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
-          build-args: |
-            VITE_API_BASE_URL=https://${{ env.EC2_DOMAIN }}
-            VITE_DRIVER_SERVICE_URL=https://${{ env.EC2_DOMAIN }}
 
   deploy-staging:
     needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
-      - name: Compute sslip.io domain
-        run: |
-          EC2_DOMAIN=$(echo '${{ secrets.EC2_HOST }}' | tr '.' '-').sslip.io
-          echo "EC2_DOMAIN=$EC2_DOMAIN" >> $GITHUB_ENV
-
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -100,23 +82,22 @@ jobs:
 
             echo "=== Starting stack ==="
             DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} \
-            CADDY_DOMAIN=${{ env.EC2_DOMAIN }} \
             docker compose up -d
 
-            echo "=== Waiting for services (alembic migrations run on startup) ==="
+            echo "=== Waiting for services ==="
             sleep 60
 
             echo "=== Health checks ==="
-            curl -sf http://localhost:8001/health && echo "✅ Auth API OK" || (echo "❌ Auth API FAILED" && exit 1)
-            curl -sf http://localhost:8002/health && echo "✅ Driver API OK" || (echo "❌ Driver API FAILED" && exit 1)
+            curl -sf http://localhost:8001/health && echo "Auth API OK" || (echo "Auth API FAILED" && exit 1)
+            curl -sf http://localhost:8002/health && echo "Driver API OK" || (echo "Driver API FAILED" && exit 1)
 
             echo "=== MQTT broker check ==="
             docker exec mosquitto mosquitto_pub \
               -t rides/deploy/test \
               -m '{"event_type":"DEPLOY_CHECK","status":"ok"}' \
-              -q 1 && echo "✅ MQTT OK" || echo "⚠️  MQTT check skipped"
+              -q 1 && echo "MQTT OK" || echo "MQTT check skipped"
 
-            echo "✅ Staging passed!"
+            echo "Staging passed!"
           ENDSSH
 
   deploy-production:
@@ -124,11 +105,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Compute sslip.io domain
-        run: |
-          EC2_DOMAIN=$(echo '${{ secrets.EC2_HOST }}' | tr '.' '-').sslip.io
-          echo "EC2_DOMAIN=$EC2_DOMAIN" >> $GITHUB_ENV
-
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -150,12 +126,11 @@ jobs:
             docker compose exec -T mosquitto mosquitto_pub \
               -t rides/deploy/test \
               -m '{"event_type":"DEPLOY","status":"ok"}' \
-              -q 1 && echo "✅ MQTT broker responding" || echo "⚠️  MQTT check failed"
+              -q 1 && echo "MQTT broker responding" || echo "MQTT check failed"
 
             echo ""
-            echo "✅ Deploy complete!"
-            echo "   Frontend   : https://${{ env.EC2_DOMAIN }}"
-            echo "   Auth API   : https://${{ env.EC2_DOMAIN }}/auth/"
-            echo "   Driver API : https://${{ env.EC2_DOMAIN }}/driver/"
-            echo "   MQTT (wss) : wss://${{ env.EC2_DOMAIN }}/mqtt"
+            echo "Deploy complete!"
+            echo "   Frontend : http://${{ secrets.EC2_HOST }}"
+            echo "   Auth API : http://${{ secrets.EC2_HOST }}:8001"
+            echo "   Driver API: http://${{ secrets.EC2_HOST }}:8002"
           ENDSSH
