@@ -353,49 +353,48 @@ function saveChat(tripId: number, msgs: ChatMsg[]) {
   try { localStorage.setItem(chatKey(tripId), JSON.stringify(msgs)); } catch {}
 }
 
-function TripChat({ tripId, myRole, myName }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; myName: string }) {
+function TripChat({ tripId, myRole }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; myName: string }) {
   const [messages, setMessages] = useState<ChatMsg[]>(() => loadChat(tripId));
-  const [input, setInput]       = useState('');
-  const topic    = `rides/${tripId}/chat`;
+  const [input, setInput] = useState('');
+  const [wsState, setWsState] = useState<'connecting' | 'open' | 'closed'>('connecting');
+  const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { publish } = useMqtt([topic], useCallback((event: MqttEvent) => {
-    if (event.event_type === 'CHAT_MESSAGE') {
-      const p = event.payload as Record<string, unknown>;
-      const msg: ChatMsg = {
-        sender:     String(p.sender ?? ''),
-        senderName: String(p.sender_name ?? ''),
-        message:    String(p.message ?? ''),
-        time:       event.timestamp,
-      };
-      setMessages(prev => {
-        const updated = [...prev, msg];
-        saveChat(tripId, updated);
-        return updated;
-      });
-    }
-  }, [tripId]));
+  useEffect(() => {
+    const token = encodeURIComponent(localStorage.getItem('access_token') ?? '');
+    const base = ((import.meta.env.VITE_API_BASE_URL as string) || `http://${window.location.hostname}:8001`).replace(/^http/, 'ws');
+    const ws = new WebSocket(`${base}/ws/chat/${tripId}?token=${token}`);
+    wsRef.current = ws;
+    ws.onopen  = () => setWsState('open');
+    ws.onclose = () => setWsState('closed');
+    ws.onerror = () => setWsState('closed');
+    ws.onmessage = (e) => {
+      try {
+        const d = JSON.parse(e.data as string);
+        if (d.type === 'message') {
+          const msg: ChatMsg = { sender: d.role, senderName: d.name, message: d.text, time: d.time };
+          setMessages(prev => { const u = [...prev, msg]; saveChat(tripId, u); return u; });
+        }
+      } catch { /* ignore */ }
+    };
+    return () => { ws.close(); wsRef.current = null; };
+  }, [tripId]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const send = () => {
     const text = input.trim();
-    if (!text) return;
-    const now = new Date().toISOString();
-    const msg: ChatMsg = { sender: myRole, senderName: myName, message: text, time: now };
-    // Add locally immediately (own messages don't echo back from MQTT)
-    setMessages(prev => { const u = [...prev, msg]; saveChat(tripId, u); return u; });
-    publish(topic, {
-      event_id: crypto.randomUUID(), event_type: 'CHAT_MESSAGE',
-      timestamp: now, version: '1.0',
-      payload: { trip_id: tripId, sender: myRole, sender_name: myName, message: text },
-    });
+    if (!text || wsRef.current?.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ text }));
     setInput('');
   };
 
   return (
     <div className="trip-chat">
-      <div className="tc-header">💬 Chat — {myRole === 'RIDER' ? 'Dereva' : 'Abiria'}</div>
+      <div className="tc-header">
+        💬 Chat — {myRole === 'RIDER' ? 'Dereva' : 'Abiria'}
+        <span className={`tc-ws-dot tc-ws-${wsState}`} title={wsState === 'open' ? 'Connected' : wsState === 'connecting' ? 'Connecting…' : 'Offline'} />
+      </div>
       <div className="tc-messages">
         {messages.length === 0
           ? <span className="tc-empty">Hakuna ujumbe bado. Sema hujambo! 👋</span>
@@ -416,9 +415,14 @@ function TripChat({ tripId, myRole, myName }: { tripId: number; myRole: 'RIDER' 
         <div ref={bottomRef} />
       </div>
       <div className="tc-input-row">
-        <input value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && send()} placeholder="Andika ujumbe…" />
-        <button className="tc-send-btn" onClick={send} disabled={!input.trim()}>➤</button>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && send()}
+          placeholder={wsState === 'open' ? 'Andika ujumbe…' : wsState === 'connecting' ? 'Inaunganisha…' : 'Hakuna muunganiko'}
+          disabled={wsState !== 'open'}
+        />
+        <button className="tc-send-btn" onClick={send} disabled={!input.trim() || wsState !== 'open'}>➤</button>
       </div>
     </div>
   );
@@ -456,6 +460,157 @@ function TripChatHistory({ tripId, myRole, standalone }: { tripId: number; myRol
   return null; // rendered via overlay from parent
 }
 
+// ── WebRTC Voice Call ─────────────────────────────────────────────────
+
+type CallState = 'idle' | 'calling' | 'ringing' | 'connected';
+
+function useWebRTCCall(tripId: number | null) {
+  const [callState, setCallState] = useState<CallState>('idle');
+  const [peerName,  setPeerName]  = useState('');
+  const [muted,     setMuted]     = useState(false);
+  const wsRef      = useRef<WebSocket | null>(null);
+  const pcRef      = useRef<RTCPeerConnection | null>(null);
+  const localRef   = useRef<MediaStream | null>(null);
+  const pendingSdp = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!tripId) return;
+    const token = encodeURIComponent(localStorage.getItem('access_token') ?? '');
+    const base = ((import.meta.env.VITE_API_BASE_URL as string) || `http://${window.location.hostname}:8001`).replace(/^http/, 'ws');
+    const ws = new WebSocket(`${base}/ws/signal/${tripId}?token=${token}`);
+    wsRef.current = ws;
+
+    ws.onmessage = async (e) => {
+      try {
+        const d = JSON.parse(e.data as string);
+        if (d.type === 'call_offer') {
+          pendingSdp.current = d.sdp as string;
+          setPeerName(d.from_name ?? '');
+          setCallState('ringing');
+        } else if (d.type === 'call_answer' && pcRef.current) {
+          await pcRef.current.setRemoteDescription({ type: 'answer', sdp: d.sdp as string });
+          setCallState('connected');
+        } else if (d.type === 'ice_candidate' && pcRef.current && d.candidate) {
+          await pcRef.current.addIceCandidate(d.candidate as RTCIceCandidateInit).catch(() => {});
+        } else if (d.type === 'call_end' || d.type === 'peer_left') {
+          _cleanup();
+        }
+      } catch { /* ignore */ }
+    };
+
+    return () => { ws.close(); wsRef.current = null; };
+  }, [tripId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const _makePC = (stream: MediaStream): RTCPeerConnection => {
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    pcRef.current = pc;
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    const audio = new Audio();
+    audio.autoplay = true;
+    pc.ontrack = e => { audio.srcObject = e.streams[0]; audio.play().catch(() => {}); };
+    pc.onicecandidate = e => {
+      if (e.candidate) {
+        wsRef.current?.send(JSON.stringify({ type: 'ice_candidate', candidate: e.candidate.toJSON() }));
+      }
+    };
+    return pc;
+  };
+
+  const call = async () => {
+    if (callState !== 'idle') return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localRef.current = stream;
+      const pc = _makePC(stream);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      wsRef.current?.send(JSON.stringify({ type: 'call_offer', sdp: offer.sdp }));
+      setCallState('calling');
+    } catch { alert('Ruhusu microphone ili kupiga simu ndani ya app.'); }
+  };
+
+  const answer = async () => {
+    if (!pendingSdp.current) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localRef.current = stream;
+      const pc = _makePC(stream);
+      await pc.setRemoteDescription({ type: 'offer', sdp: pendingSdp.current });
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      wsRef.current?.send(JSON.stringify({ type: 'call_answer', sdp: ans.sdp }));
+      setCallState('connected');
+      pendingSdp.current = null;
+    } catch { alert('Ruhusu microphone.'); }
+  };
+
+  const reject = () => {
+    wsRef.current?.send(JSON.stringify({ type: 'call_end' }));
+    pendingSdp.current = null;
+    setCallState('idle'); setPeerName('');
+  };
+
+  const hangup = () => {
+    wsRef.current?.send(JSON.stringify({ type: 'call_end' }));
+    _cleanup();
+  };
+
+  const toggleMute = () => {
+    localRef.current?.getAudioTracks().forEach(t => { t.enabled = !t.enabled; });
+    setMuted(m => !m);
+  };
+
+  const _cleanup = () => {
+    pcRef.current?.close(); pcRef.current = null;
+    localRef.current?.getTracks().forEach(t => t.stop()); localRef.current = null;
+    pendingSdp.current = null;
+    setCallState('idle'); setMuted(false);
+  };
+
+  return { callState, peerName, muted, call, answer, reject, hangup, toggleMute };
+}
+
+function VoiceCallUI({ rtc, remoteName }: {
+  rtc: ReturnType<typeof useWebRTCCall>;
+  remoteName: string;
+}) {
+  if (rtc.callState === 'idle') return null;
+  const name = rtc.peerName || remoteName;
+  return (
+    <div className="call-overlay">
+      <div className="call-card">
+        <div className="call-avatar">{name.charAt(0).toUpperCase()}</div>
+        <div className="call-name">{name}</div>
+        <div className="call-status-text">
+          {rtc.callState === 'calling'   && <><span className="call-pulse" /> Inapiga simu…</>}
+          {rtc.callState === 'ringing'   && <><span className="call-pulse" /> Simu inakuja…</>}
+          {rtc.callState === 'connected' && '🟢 Unaongea'}
+        </div>
+        {rtc.callState === 'ringing' && (
+          <div className="call-btns">
+            <button className="call-btn call-btn-reject" onClick={rtc.reject}>📵 Kataa</button>
+            <button className="call-btn call-btn-answer" onClick={rtc.answer}>📞 Jibu</button>
+          </div>
+        )}
+        {(rtc.callState === 'calling' || rtc.callState === 'connected') && (
+          <div className="call-btns">
+            {rtc.callState === 'connected' && (
+              <button
+                className={`call-btn call-btn-mute${rtc.muted ? ' muted' : ''}`}
+                onClick={rtc.toggleMute}
+                title={rtc.muted ? 'Unmute' : 'Mute'}
+              >
+                {rtc.muted ? '🔇' : '🎙️'}
+              </button>
+            )}
+            <button className="call-btn call-btn-end" onClick={rtc.hangup}>📵 Maliza</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Current Trip Card (Driver) ─────────────────────────────────────────
 // 4-click flow: 1.Accept → 2.Anza Safari → 3.Nakaribia → 4.Nimemaliza
 
@@ -470,6 +625,7 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const [notifySent, setNotifySent] = useState(false);
   const [chatOpen, setChatOpen]     = useState(false);
   const prevLocRef = useRef<{ lat: number; lng: number } | null>(null);
+  const rtcDriver = useWebRTCCall(trip.id);
 
   // Keep an MQTT connection alive while trip is active for location publishing
   const isActive = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
@@ -555,13 +711,20 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
         </div>
       </div>
 
-      {/* Chat toggle row */}
+      {/* Chat & Call row */}
       <div className="ctc-chat-row">
         <button
           className={`ctc-chat-toggle${chatOpen ? ' active' : ''}`}
           onClick={() => setChatOpen(o => !o)}
         >
           💬 Chat na Abiria {chatOpen ? '▲' : '▼'}
+        </button>
+        <button
+          className={`ctc-call-btn${rtcDriver.callState !== 'idle' ? ' ring' : ''}`}
+          onClick={rtcDriver.call}
+          title="Piga simu ndani ya app (WebRTC)"
+        >
+          📞 Piga Simu
         </button>
       </div>
       <div style={{ display: chatOpen ? undefined : 'none' }}>
@@ -593,6 +756,7 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
         )}
 
       </div>
+      <VoiceCallUI rtc={rtcDriver} remoteName="Abiria" />
     </div>
   );
 }
@@ -1364,12 +1528,13 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 }) {
   const [trip, setTrip]               = useState(initialTrip);
   const [cancelling, setCancelling]   = useState(false);
-  const [driverPhone, setDriverPhone] = useState('');
   const [driverId, setDriverId]       = useState<number | null>(initialTrip.assigned_driver?.id ?? null);
   const [approaching, setApproaching] = useState(false);
   const [driverPos, setDriverPos]     = useState<{lat:number;lng:number}|null>(null);
   const [chatOpen, setChatOpen]       = useState(false);
   const { user } = useAuth();
+  const canCall = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
+  const rtc = useWebRTCCall(canCall ? trip.id : null);
 
   // Real-time updates via MQTT (status events)
   const mqttTopics = ACTIVE_TRIP_STATUSES.includes(trip.status)
@@ -1379,7 +1544,6 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   useMqtt(mqttTopics, useCallback((event: MqttEvent) => {
     const p = event.payload as Record<string, unknown>;
     if (event.event_type === 'RIDE_ACCEPTED') {
-      setDriverPhone(String(p.driver_phone ?? ''));
       setDriverId(Number(p.driver_id) || null);
       setTrip(prev => ({
         ...prev,
@@ -1514,8 +1678,8 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
                 <div className="chat-sheet-sub">{trip.assigned_driver?.vehicle_model ?? ''}</div>
               </div>
             </div>
-            {driverPhone && (
-              <a href={`tel:${driverPhone}`} className="chat-sheet-call" title="Piga simu">📞</a>
+            {canCall && (
+              <button className="chat-sheet-call" onClick={rtc.call} title="Piga simu ndani ya app (WebRTC)">📞</button>
             )}
           </div>
           <TripChat tripId={trip.id} myRole="RIDER" myName={user?.full_name ?? 'Rider'} />
@@ -1558,10 +1722,14 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
               )}
             </div>
             <div className="tracking-driver-btns">
-              {driverPhone && (
-                <a href={`tel:${driverPhone}`} className="tracking-icon-btn tracking-call-btn" title="Piga simu">
+              {canCall && (
+                <button
+                  className={`tracking-icon-btn tracking-call-btn${rtc.callState !== 'idle' ? ' ring' : ''}`}
+                  onClick={rtc.call}
+                  title="Piga simu ndani ya app (WebRTC)"
+                >
                   📞
-                </a>
+                </button>
               )}
               {showChat && (
                 <button
@@ -1616,6 +1784,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           )}
         </div>
       </div>
+      <VoiceCallUI rtc={rtc} remoteName={trip.assigned_driver?.full_name ?? 'Dereva'} />
     </div>
   );
 }
