@@ -1983,44 +1983,41 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
       {!isLoading && sorted.length > 0 && (
         <div className="trip-list">
           {sorted.map(trip => (
-            <div key={trip.id} className="trip-card">
-              <div className="trip-card-head">
-                <div className="trip-card-head-left">
-                  <TripStatusBadge status={trip.status} />
-                  <span className="trip-card-id">{trip.trip_name ?? `Trip #${trip.id}`}</span>
+            <div key={trip.id} className={`trip-card-h tc-s-${trip.status.toLowerCase()}`}>
+              {/* Left accent bar based on status */}
+              <div className="tch-accent" />
+
+              {/* Centre: name + route */}
+              <div className="tch-body">
+                <div className="tch-name">{trip.trip_name ?? `Trip #${trip.id}`}</div>
+                <div className="tch-route">
+                  <span className="tch-dot tch-dot-from" />
+                  <span className="tch-addr">{trip.pickup_address}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="trip-card-date">{fmtDate(trip.created_at)} · {fmtTime(trip.created_at)}</span>
-                  <button className="trip-chat-open-btn" onClick={() => setChatTripId(trip.id)} title="Ona mazungumzo">💬</button>
+                <div className="tch-route-line" />
+                <div className="tch-route">
+                  <span className="tch-dot tch-dot-to" />
+                  <span className="tch-addr">{trip.destination_address}</span>
                 </div>
-              </div>
-              <div className="trip-route">
-                <div className="trip-route-item">
-                  <span className="trip-route-dot dot-pickup" />
-                  <span className="trip-route-text">{trip.pickup_address}</span>
-                </div>
-                <div className="trip-route-line" />
-                <div className="trip-route-item">
-                  <span className="trip-route-dot dot-dest" />
-                  <span className="trip-route-text">{trip.destination_address}</span>
-                </div>
-              </div>
-              {trip.assigned_driver && (
-                <div className="trip-driver-row">
-                  <span>🏍️ {trip.assigned_driver.full_name}</span>
-                  <span className="trip-driver-sep">·</span>
-                  <span>{trip.assigned_driver.plate_number}</span>
-                  <span className="trip-driver-sep">·</span>
-                  <span>⭐ {trip.assigned_driver.rating.toFixed(1)}</span>
-                </div>
-              )}
-              {canCancel(trip.status) && (
-                <div className="trip-card-foot">
-                  <button className="btn btn-ghost btn-sm" onClick={() => cancel(trip.id)} disabled={cancellingId === trip.id}>
-                    {cancellingId === trip.id ? 'Inafuta…' : 'Futa Safari'}
+                {trip.assigned_driver && (
+                  <div className="tch-driver">
+                    🏍️ {trip.assigned_driver.full_name} · {trip.assigned_driver.plate_number} · ⭐{trip.assigned_driver.rating.toFixed(1)}
+                  </div>
+                )}
+                {canCancel(trip.status) && (
+                  <button className="tch-cancel-btn" onClick={() => cancel(trip.id)} disabled={cancellingId === trip.id}>
+                    {cancellingId === trip.id ? 'Inafuta…' : '✕ Futa Safari'}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
+
+              {/* Right: status + date + chat button */}
+              <div className="tch-side">
+                <TripStatusBadge status={trip.status} />
+                <span className="tch-date">{fmtDate(trip.created_at)}</span>
+                <span className="tch-time-val">{fmtTime(trip.created_at)}</span>
+                <button className="tch-chat-btn" onClick={() => setChatTripId(trip.id)} title="Ona mazungumzo">💬</button>
+              </div>
             </div>
           ))}
         </div>
@@ -2214,27 +2211,25 @@ function OfferHistoryTab() {
       {!isLoading && sorted.length > 0 && (
         <div className="trip-list">
           {sorted.map(trip => (
-            <div key={trip.id} className="trip-card">
-              <div className="trip-card-head">
-                <div className="trip-card-head-left">
-                  <TripStatusBadge status={trip.status} />
-                  <span className="trip-card-id">{trip.trip_name ?? `Trip #${trip.id}`}</span>
+            <div key={trip.id} className={`trip-card-h tc-s-${trip.status.toLowerCase()}`}>
+              <div className="tch-accent" />
+              <div className="tch-body">
+                <div className="tch-name">{trip.trip_name ?? `Trip #${trip.id}`}</div>
+                <div className="tch-route">
+                  <span className="tch-dot tch-dot-from" />
+                  <span className="tch-addr">{trip.pickup_address}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className="trip-card-date">{fmtDate(trip.created_at)} · {fmtTime(trip.created_at)}</span>
-                  <button className="trip-chat-open-btn" onClick={() => setChatTripId(trip.id)} title="Ona mazungumzo">💬</button>
+                <div className="tch-route-line" />
+                <div className="tch-route">
+                  <span className="tch-dot tch-dot-to" />
+                  <span className="tch-addr">{trip.destination_address}</span>
                 </div>
               </div>
-              <div className="trip-route">
-                <div className="trip-route-item">
-                  <span className="trip-route-dot dot-pickup" />
-                  <span className="trip-route-text">{trip.pickup_address}</span>
-                </div>
-                <div className="trip-route-line" />
-                <div className="trip-route-item">
-                  <span className="trip-route-dot dot-dest" />
-                  <span className="trip-route-text">{trip.destination_address}</span>
-                </div>
+              <div className="tch-side">
+                <TripStatusBadge status={trip.status} />
+                <span className="tch-date">{fmtDate(trip.created_at)}</span>
+                <span className="tch-time-val">{fmtTime(trip.created_at)}</span>
+                <button className="tch-chat-btn" onClick={() => setChatTripId(trip.id)} title="Ona mazungumzo">💬</button>
               </div>
             </div>
           ))}
