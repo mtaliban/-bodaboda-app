@@ -1532,6 +1532,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const [approaching, setApproaching] = useState(false);
   const [driverPos, setDriverPos]     = useState<{lat:number;lng:number}|null>(null);
   const [chatOpen, setChatOpen]       = useState(false);
+  const [declineToast, setDeclineToast] = useState<string | null>(null);
   const { user } = useAuth();
   const canCall = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
   const rtc = useWebRTCCall(canCall ? trip.id : null);
@@ -1543,7 +1544,8 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 
   useMqtt(mqttTopics, useCallback((event: MqttEvent) => {
     const p = event.payload as Record<string, unknown>;
-    if (event.event_type === 'RIDE_ACCEPTED') {
+
+    if (event.event_type === 'RIDE_DRIVER_ASSIGNED' || event.event_type === 'RIDE_ACCEPTED') {
       setDriverId(Number(p.driver_id) || null);
       setTrip(prev => ({
         ...prev,
@@ -1556,6 +1558,15 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           rating: 0,
         },
       }));
+
+    } else if (event.event_type === 'RIDE_SEARCHING_AGAIN') {
+      setTrip(prev => ({ ...prev, status: 'SEARCHING_DRIVER' }));
+      setDeclineToast('Dereva alikataa — tunakutafutia mwingine…');
+      setTimeout(() => setDeclineToast(null), 5000);
+
+    } else if (event.event_type === 'RIDE_NO_DRIVER_AVAILABLE') {
+      setTrip(prev => ({ ...prev, status: 'NO_DRIVER_AVAILABLE' }));
+
     } else if (event.event_type === 'DRIVER_APPROACHING') {
       setApproaching(true);
       setTimeout(() => setApproaching(false), 8000);
@@ -1625,6 +1636,11 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 
   return (
     <div className="tracking-page">
+
+      {/* ── Driver decline toast ── */}
+      {declineToast && (
+        <div className="decline-toast">{declineToast}</div>
+      )}
 
       {/* ── Map area ── */}
       <div className="tracking-map-area">

@@ -4158,3 +4158,25 @@ button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
   align-items: center;
   gap: 0.4rem;
 }
+
+/* ── Driver-decline toast ─────────────────────────────────────────── */
+.decline-toast {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: #1f2937;
+  color: #fff;
+  padding: 0.7rem 1.2rem;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+  white-space: nowrap;
+  animation: toast-in 0.25s ease;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

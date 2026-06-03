@@ -12,6 +12,7 @@ from app.models.driver_trip_offer import DriverTripOffer, OfferStatus
 from app.models.trip import Trip, TripStatus
 from app.models.trip_status_history import TripStatusHistory, ChangedBy
 from app.models.user import User, UserRole
+from app.services.mqtt_service import publish_ride_status
 from app.services.notification_service import NotificationService
 
 OFFER_EXPIRY_MINUTES = 2
@@ -235,6 +236,13 @@ class DriverService:
         await self.db.refresh(driver)
         await self.db.refresh(trip)
 
+        await publish_ride_status(trip.id, "DRIVER_ASSIGNED", {
+            "driver_id":   driver.id,
+            "driver_name": driver.full_name,
+            "vehicle":     driver.vehicle_model,
+            "plate":       driver.plate_number,
+        })
+
         return {"offer": offer, "trip": trip, "driver": driver}
 
     async def decline_offer(self, user: User, offer_id: int) -> dict:
@@ -279,6 +287,11 @@ class DriverService:
 
         await self.db.commit()
         await self.db.refresh(offer)
+
+        if next_offer:
+            await publish_ride_status(trip.id, "SEARCHING_AGAIN", {"trip_id": trip.id})
+        else:
+            await publish_ride_status(trip.id, "NO_DRIVER_AVAILABLE", {"trip_id": trip.id})
 
         return {"offer": offer, "next_action": next_action}
 
