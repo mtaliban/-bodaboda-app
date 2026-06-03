@@ -4419,3 +4419,122 @@ button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
   margin: 0.2rem 0;
   line-height: 1.4;
 }
+
+/* ── TripStatusView full-screen chat overlay ────────────────────────── */
+.tsv-chat-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  background: #f0f2f5;
+}
+
+.tsv-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--navy);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  flex-shrink: 0;
+  min-height: 62px;
+}
+
+.tsv-chat-back {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.tsv-chat-back:hover { background: rgba(255,255,255,0.12); }
+
+.tsv-chat-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tsv-chat-info { flex: 1; min-width: 0; }
+.tsv-chat-name {
+  font-weight: 700;
+  font-size: 0.97rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tsv-chat-sub {
+  font-size: 0.72rem;
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tsv-chat-call {
+  background: rgba(255,255,255,0.12);
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.tsv-chat-call:hover { background: rgba(255,255,255,0.22); }
+
+.tsv-chat-overlay .trip-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  box-shadow: none;
+}
+.tsv-chat-overlay .trip-chat .tc-header { display: none; }
+.tsv-chat-overlay .trip-chat .tc-messages {
+  flex: 1;
+  max-height: none;
+  min-height: 0;
+}
+
+/* ── Driver offer banner (new ride notification) ────────────────────── */
+.driver-offer-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9998;
+  background: var(--primary);
+  color: #fff;
+  text-align: center;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgba(255,107,0,0.45);
+  animation: banner-slide-down 0.3s ease;
+}
+@keyframes banner-slide-down {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}

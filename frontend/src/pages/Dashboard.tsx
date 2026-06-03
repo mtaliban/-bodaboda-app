@@ -1793,25 +1793,20 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
         )}
       </div>
 
-      {/* ── Chat bottom sheet — always in DOM for MQTT ── */}
+      {/* ── Chat overlay (full-screen, only when opened) ── */}
       {showChat && chatOpen && (
-        <div className="chat-sheet-backdrop" onClick={() => setChatOpen(false)} />
-      )}
-      {showChat && (
-        <div className={`chat-sheet${chatOpen ? ' chat-sheet-open' : ''}`}>
-          <div className="chat-sheet-handle" onClick={() => setChatOpen(false)} />
-          <div className="chat-sheet-header">
-            <div className="chat-sheet-person">
-              <div className="chat-sheet-avatar">
-                {(trip.assigned_driver?.full_name ?? 'D').charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div className="chat-sheet-name">{trip.assigned_driver?.full_name ?? 'Dereva'}</div>
-                <div className="chat-sheet-sub">{trip.assigned_driver?.vehicle_model ?? ''}</div>
-              </div>
+        <div className="tsv-chat-overlay">
+          <div className="tsv-chat-header">
+            <button className="tsv-chat-back" onClick={() => setChatOpen(false)}>←</button>
+            <div className="tsv-chat-avatar">
+              {(trip.assigned_driver?.full_name ?? 'D').charAt(0).toUpperCase()}
+            </div>
+            <div className="tsv-chat-info">
+              <div className="tsv-chat-name">{trip.assigned_driver?.full_name ?? 'Dereva'}</div>
+              <div className="tsv-chat-sub">{trip.assigned_driver?.vehicle_model ?? ''} · {trip.assigned_driver?.plate_number ?? ''}</div>
             </div>
             {canCall && (
-              <button className="chat-sheet-call" onClick={rtc.call} title="Piga simu ndani ya app (WebRTC)">📞</button>
+              <button className="tsv-chat-call" onClick={rtc.call} title="Piga simu">📞</button>
             )}
           </div>
           <TripChat tripId={trip.id} myRole="RIDER" myName={user?.full_name ?? 'Rider'} />
@@ -2156,9 +2151,15 @@ function CurrentOfferTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 8000);
+    const interval = setInterval(load, 5000);
     return () => clearInterval(interval);
   }, [load]);
+
+  useMqtt(['rides/new'], useCallback((event: MqttEvent) => {
+    if (event.event_type === 'RIDE_REQUESTED') {
+      setTimeout(load, 500);
+    }
+  }, [load]));
 
   const accept = async () => {
     if (!offer) return;
@@ -2539,6 +2540,47 @@ function BottomNav({ user, activeTab, setActiveTab, onLogout, unreadCount }: {
   );
 }
 
+// ── Driver Offer Watcher (always mounted for driver, any tab) ─────────
+
+function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
+  activeTab: Tab;
+  setActiveTab: (t: Tab) => void;
+}) {
+  const [banner, setBanner] = useState(false);
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  useMqtt(['rides/new'], useCallback((event: MqttEvent) => {
+    if (event.event_type !== 'RIDE_REQUESTED') return;
+    const p = event.payload as Record<string, unknown>;
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const n = new Notification('🏍️ Ombi Jipya la Safari!', {
+        body: `${p.pickup_address ?? ''} → ${p.destination_address ?? ''}`,
+        tag: `offer-${String(p.trip_id)}`,
+        requireInteraction: true,
+      });
+      n.onclick = () => { window.focus(); setActiveTab('current-offer'); n.close(); };
+    }
+
+    setBanner(true);
+    setTimeout(() => setBanner(false), 12000);
+    setActiveTab('current-offer');
+  }, [setActiveTab]));
+
+  if (!banner) return null;
+
+  return (
+    <div className="driver-offer-banner" onClick={() => setActiveTab('current-offer')}>
+      🏍️ Ombi jipya la safari limekuja — Gonga kukubali!
+    </div>
+  );
+}
+
 // ── Dashboard (root) ──────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -2603,6 +2645,9 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {isDriver && (
+        <DriverOfferWatcher activeTab={activeTab} setActiveTab={handleTabChange} />
+      )}
       <BottomNav user={user} activeTab={activeTab} setActiveTab={handleTabChange} onLogout={handleLogout} unreadCount={unreadCount} />
     </div>
   );
