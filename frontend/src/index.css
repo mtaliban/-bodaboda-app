@@ -3380,24 +3380,7 @@ button.edit-back {
 }
 .tc-input-row input:focus { box-shadow: 0 1px 6px rgba(0,0,0,0.18); }
 .tc-input-row input::placeholder { color: #adb5bd; }
-.tc-send-btn {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  font-size: 1.05rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.2s, transform 0.1s;
-  box-shadow: 0 2px 6px rgba(255,107,0,0.35);
-}
-.tc-send-btn:hover { background: #e05a00; transform: scale(1.07); }
-.tc-send-btn:disabled { background: #d1d5db; cursor: not-allowed; transform: none; box-shadow: none; }
+/* .tc-send-btn styles now in the ChatPanel section below */
 
 /* ── Trip Live Map ───────────────────────────────────────────────────── */
 .trip-live-map-wrap {
@@ -4281,4 +4264,158 @@ button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── ChatPanel (full-screen trip chat from My Trips) ────────────────── */
+.trip-chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--nav-h) - 65px);
+  background: #f0f2f5;
+  overflow: hidden;
+}
+@media (min-width: 769px) {
+  .trip-chat-panel { height: calc(100vh - var(--nav-h)); }
+}
+
+.tcp-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--navy);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  flex-shrink: 0;
+  min-height: 62px;
+}
+
+.tcp-back {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.35rem;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.tcp-back:hover { background: rgba(255,255,255,0.12); }
+
+.tcp-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.tcp-info {
+  flex: 1;
+  min-width: 0;
+}
+.tcp-name {
+  font-weight: 700;
+  font-size: 0.97rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tcp-route {
+  font-size: 0.72rem;
+  opacity: 0.72;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+/* ChatPanel hides TripChat's own header; TripChat fills remaining space */
+.trip-chat-panel .trip-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  box-shadow: none;
+}
+.trip-chat-panel .trip-chat .tc-header { display: none; }
+.trip-chat-panel .trip-chat .tc-messages {
+  flex: 1;
+  max-height: none;
+  min-height: 0;
+}
+
+.tcp-readonly-bar {
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  padding: 0.7rem 1rem;
+  text-align: center;
+  font-size: 0.82rem;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+/* ── Input row improvements (paperclip + send circle) ───────────────── */
+.tc-attach-icon {
+  font-size: 1.15rem;
+  color: #6b7280;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0.2rem;
+  transition: color 0.15s;
+  line-height: 1;
+}
+.tc-attach-icon:hover { color: var(--primary); }
+
+.tc-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #25d366;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.1s;
+  box-shadow: 0 2px 8px rgba(37,211,102,0.4);
+}
+.tc-send-btn:hover { background: #1ebe5c; transform: scale(1.08); }
+.tc-send-btn:disabled { background: #d1d5db; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* ── Microphone error card (replaces alert) ─────────────────────────── */
+.call-mic-icon {
+  font-size: 2.4rem;
+  margin: 0 auto 0.75rem;
+}
+.call-mic-msg {
+  font-size: 0.92rem;
+  opacity: 0.85;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+.call-mic-steps {
+  background: rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  margin-bottom: 1.5rem;
+}
+.call-mic-steps p {
+  font-size: 0.82rem;
+  opacity: 0.8;
+  margin: 0.2rem 0;
+  line-height: 1.4;
 }

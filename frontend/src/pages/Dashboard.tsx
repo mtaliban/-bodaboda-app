@@ -415,6 +415,7 @@ function TripChat({ tripId, myRole }: { tripId: number; myRole: 'RIDER' | 'DRIVE
         <div ref={bottomRef} />
       </div>
       <div className="tc-input-row">
+        <span className="tc-attach-icon">📎</span>
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -422,7 +423,9 @@ function TripChat({ tripId, myRole }: { tripId: number; myRole: 'RIDER' | 'DRIVE
           placeholder={wsState === 'open' ? 'Andika ujumbe…' : wsState === 'connecting' ? 'Inaunganisha…' : 'Hakuna muunganiko'}
           disabled={wsState !== 'open'}
         />
-        <button className="tc-send-btn" onClick={send} disabled={!input.trim() || wsState !== 'open'}>➤</button>
+        <button className="tc-send-btn" onClick={send} disabled={!input.trim() || wsState !== 'open'}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
       </div>
     </div>
   );
@@ -460,6 +463,50 @@ function TripChatHistory({ tripId, myRole, standalone }: { tripId: number; myRol
   return null; // rendered via overlay from parent
 }
 
+// ── Chat Panel (full-screen overlay for My Trips chat) ───────────────
+
+function ChatPanel({ trip, myRole, myName, onClose }: {
+  trip: Trip;
+  myRole: 'RIDER' | 'DRIVER';
+  myName: string;
+  onClose: () => void;
+}) {
+  const isActive = ACTIVE_TRIP_STATUSES.includes(trip.status);
+  const initials = (trip.trip_name ?? `T${trip.id}`)
+    .replace(/[→·\-–]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(w => w.charAt(0).toUpperCase())
+    .join('') || 'T';
+
+  return (
+    <div className="trip-chat-panel">
+      <div className="tcp-header">
+        <button className="tcp-back" onClick={onClose}>←</button>
+        <div className="tcp-avatar">{initials}</div>
+        <div className="tcp-info">
+          <div className="tcp-name">{trip.trip_name ?? `Trip #${trip.id}`}</div>
+          <div className="tcp-route">{trip.pickup_address} → {trip.destination_address}</div>
+        </div>
+        <TripStatusBadge status={trip.status} />
+      </div>
+
+      {isActive
+        ? <TripChat tripId={trip.id} myRole={myRole} myName={myName} />
+        : (
+          <>
+            <TripChatHistory tripId={trip.id} myRole={myRole} standalone />
+            <div className="tcp-readonly-bar">
+              🔒 {trip.status === 'CANCELLED' ? 'Safari ilifutwa' : 'Safari imekamilika'} — huwezi kutuma ujumbe
+            </div>
+          </>
+        )
+      }
+    </div>
+  );
+}
+
 // ── WebRTC Voice Call ─────────────────────────────────────────────────
 
 type CallState = 'idle' | 'calling' | 'ringing' | 'connected';
@@ -468,6 +515,7 @@ function useWebRTCCall(tripId: number | null) {
   const [callState, setCallState] = useState<CallState>('idle');
   const [peerName,  setPeerName]  = useState('');
   const [muted,     setMuted]     = useState(false);
+  const [micError,  setMicError]  = useState<string | null>(null);
   const wsRef      = useRef<WebSocket | null>(null);
   const pcRef      = useRef<RTCPeerConnection | null>(null);
   const localRef   = useRef<MediaStream | null>(null);
@@ -534,7 +582,7 @@ function useWebRTCCall(tripId: number | null) {
       await pc.setLocalDescription(offer);
       wsRef.current?.send(JSON.stringify({ type: 'call_offer', sdp: offer.sdp }));
       setCallState('calling');
-    } catch { alert('Ruhusu microphone ili kupiga simu ndani ya app.'); }
+    } catch { setMicError('Ruhusu microphone ili kupiga simu ndani ya app.'); }
   };
 
   const answer = async () => {
@@ -549,7 +597,7 @@ function useWebRTCCall(tripId: number | null) {
       wsRef.current?.send(JSON.stringify({ type: 'call_answer', sdp: ans.sdp }));
       setCallState('connected');
       pendingSdp.current = null;
-    } catch { alert('Ruhusu microphone.'); }
+    } catch { setMicError('Ruhusu microphone ili kujibu simu.'); }
   };
 
   const reject = () => {
@@ -575,13 +623,33 @@ function useWebRTCCall(tripId: number | null) {
     setCallState('idle'); setMuted(false);
   };
 
-  return { callState, peerName, muted, call, answer, reject, hangup, toggleMute };
+  return { callState, peerName, muted, micError, clearMicError: () => setMicError(null), call, answer, reject, hangup, toggleMute };
 }
 
 function VoiceCallUI({ rtc, remoteName }: {
   rtc: ReturnType<typeof useWebRTCCall>;
   remoteName: string;
 }) {
+  if (rtc.micError) {
+    return (
+      <div className="call-overlay">
+        <div className="call-card">
+          <div className="call-mic-icon">🎤</div>
+          <div className="call-name">Ruhusa ya Microphone</div>
+          <div className="call-mic-msg">{rtc.micError}</div>
+          <div className="call-mic-steps">
+            <p>1. Gonga icon ya 🔒 kwenye address bar</p>
+            <p>2. Ruhusu Microphone</p>
+            <p>3. Reload ukurasa kisha jaribu tena</p>
+          </div>
+          <div className="call-btns">
+            <button className="call-btn call-btn-end" onClick={rtc.clearMicError}>Sawa</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (rtc.callState === 'idle') return null;
   const name = rtc.peerName || remoteName;
   return (
@@ -1969,6 +2037,7 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
 // ── My Trips Tab (RIDER only) ─────────────────────────────────────────
 
 function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
+  const { user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1997,27 +2066,19 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
   const sorted = [...trips].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const chatTrip = chatTripId != null ? sorted.find(t => t.id === chatTripId) : null;
 
-  return (
-    <div className="tab-page" style={{ position: 'relative' }}>
+  if (chatTrip) {
+    return (
+      <ChatPanel
+        trip={chatTrip}
+        myRole="RIDER"
+        myName={user?.full_name ?? 'Rider'}
+        onClose={() => setChatTripId(null)}
+      />
+    );
+  }
 
-      {/* ── Chat bottom sheet ── */}
-      {chatTrip && (
-        <>
-          <div className="chat-sheet-backdrop" onClick={() => setChatTripId(null)} />
-          <div className="chat-sheet chat-sheet-open">
-            <div className="chat-sheet-handle" onClick={() => setChatTripId(null)} />
-            <div className="chat-sheet-header">
-              <button className="chat-sheet-back" onClick={() => setChatTripId(null)}>←</button>
-              <div className="chat-sheet-info">
-                <div className="chat-sheet-title">{chatTrip.trip_name ?? `Trip #${chatTrip.id}`}</div>
-                <div className="chat-sheet-desc">{chatTrip.pickup_address} → {chatTrip.destination_address}</div>
-              </div>
-              <div className="thco-status"><TripStatusBadge status={chatTrip.status} /></div>
-            </div>
-            <TripChatHistory tripId={chatTrip.id} myRole="RIDER" standalone />
-          </div>
-        </>
-      )}
+  return (
+    <div className="tab-page">
 
       <div className="tab-page-head">
         <h1 className="tab-page-title">My Trips</h1>
@@ -2211,6 +2272,7 @@ function CurrentOfferTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
 // ── Offer History Tab (DRIVER only) ──────────────────────────────────
 
 function OfferHistoryTab() {
+  const { user } = useAuth();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2226,27 +2288,19 @@ function OfferHistoryTab() {
   const sorted = [...trips].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const chatTrip = chatTripId != null ? sorted.find(t => t.id === chatTripId) : null;
 
-  return (
-    <div className="tab-page" style={{ position: 'relative' }}>
+  if (chatTrip) {
+    return (
+      <ChatPanel
+        trip={chatTrip}
+        myRole="DRIVER"
+        myName={user?.full_name ?? 'Dereva'}
+        onClose={() => setChatTripId(null)}
+      />
+    );
+  }
 
-      {/* ── Chat bottom sheet ── */}
-      {chatTrip && (
-        <>
-          <div className="chat-sheet-backdrop" onClick={() => setChatTripId(null)} />
-          <div className="chat-sheet chat-sheet-open">
-            <div className="chat-sheet-handle" onClick={() => setChatTripId(null)} />
-            <div className="chat-sheet-header">
-              <button className="chat-sheet-back" onClick={() => setChatTripId(null)}>←</button>
-              <div className="chat-sheet-info">
-                <div className="chat-sheet-title">{chatTrip.trip_name ?? `Trip #${chatTrip.id}`}</div>
-                <div className="chat-sheet-desc">{chatTrip.pickup_address} → {chatTrip.destination_address}</div>
-              </div>
-              <div className="thco-status"><TripStatusBadge status={chatTrip.status} /></div>
-            </div>
-            <TripChatHistory tripId={chatTrip.id} myRole="DRIVER" standalone />
-          </div>
-        </>
-      )}
+  return (
+    <div className="tab-page">
 
       <div className="tab-page-head">
         <h1 className="tab-page-title">My Trips</h1>
