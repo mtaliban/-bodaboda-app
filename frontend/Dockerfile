@@ -19,19 +19,9 @@ RUN npm run build
 
 FROM nginx:alpine
 
-# Generate a self-signed TLS certificate so the app runs on HTTPS.
-# WebRTC (getUserMedia) requires a secure context — HTTPS or localhost.
-RUN apk add --no-cache openssl && \
-    mkdir -p /etc/nginx/certs && \
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-      -keyout /etc/nginx/certs/key.pem \
-      -out  /etc/nginx/certs/cert.pem \
-      -subj "/CN=bodaboda/O=BodaBoda/C=TZ" && \
-    apk del openssl
-
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80 443
+EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

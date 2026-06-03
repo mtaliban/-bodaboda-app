@@ -362,7 +362,7 @@ function TripChat({ tripId, myRole }: { tripId: number; myRole: 'RIDER' | 'DRIVE
 
   useEffect(() => {
     const token = encodeURIComponent(localStorage.getItem('access_token') ?? '');
-    const base = ((import.meta.env.VITE_API_BASE_URL as string) || `http://${window.location.hostname}:8001`).replace(/^http/, 'ws');
+    const base = ((import.meta.env.VITE_API_BASE_URL as string) || window.location.origin).replace(/^http/, 'ws');
     const ws = new WebSocket(`${base}/ws/chat/${tripId}?token=${token}`);
     wsRef.current = ws;
     ws.onopen  = () => setWsState('open');
@@ -524,7 +524,7 @@ function useWebRTCCall(tripId: number | null) {
   useEffect(() => {
     if (!tripId) return;
     const token = encodeURIComponent(localStorage.getItem('access_token') ?? '');
-    const base = ((import.meta.env.VITE_API_BASE_URL as string) || `http://${window.location.hostname}:8001`).replace(/^http/, 'ws');
+    const base = ((import.meta.env.VITE_API_BASE_URL as string) || window.location.origin).replace(/^http/, 'ws');
     const ws = new WebSocket(`${base}/ws/signal/${tripId}?token=${token}`);
     wsRef.current = ws;
 
