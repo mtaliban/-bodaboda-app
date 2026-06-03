@@ -685,7 +685,7 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   return (
     <div className="current-trip-card">
       <div className="ctc-head">
-        <span className="ctc-title">🏍️ Trip #{trip.id}</span>
+        <span className="ctc-title">🏍️ {trip.trip_name ?? `Trip #${trip.id}`}</span>
         <TripStatusBadge status={trip.status} />
       </div>
 
@@ -940,7 +940,7 @@ function DriverHomePanel() {
         <div className="offer-card offer-card-featured" style={{ marginTop: '1rem' }}>
           <div className="offer-card-head">
             <span className="trip-status-badge ts-searching">🔔 Safari Mpya!</span>
-            <span className="trip-card-id">Trip #{(incomingTrip as any).trip_id ?? incomingTrip.id}</span>
+            <span className="trip-card-id">{(incomingTrip as any).trip_name ?? `Safari #${(incomingTrip as any).trip_id ?? incomingTrip.id}`}</span>
           </div>
           <div className="trip-route offer-route">
             <div className="trip-route-item">
@@ -1649,7 +1649,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           <button className="tracking-back-btn" onClick={onViewTrips}>←</button>
           <div className="tracking-header-center">
             <span className="tracking-title">
-              {trip.status === 'COMPLETED' ? 'Safari Imekamilika' : `Trip #${trip.id}`}
+              {trip.status === 'COMPLETED' ? 'Safari Imekamilika' : (trip.trip_name ?? `Trip #${trip.id}`)}
             </span>
             {eta !== null && isActive && (
               <span className="tracking-eta-sub">⏱ ~{eta} min</span>
@@ -1951,7 +1951,7 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
             <div className="chat-sheet-header">
               <button className="chat-sheet-back" onClick={() => setChatTripId(null)}>←</button>
               <div className="chat-sheet-info">
-                <div className="chat-sheet-title">Trip #{chatTrip.id}</div>
+                <div className="chat-sheet-title">{chatTrip.trip_name ?? `Trip #${chatTrip.id}`}</div>
                 <div className="chat-sheet-desc">{chatTrip.pickup_address} → {chatTrip.destination_address}</div>
               </div>
               <div className="thco-status"><TripStatusBadge status={chatTrip.status} /></div>
@@ -1979,7 +1979,7 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
               <div className="trip-card-head">
                 <div className="trip-card-head-left">
                   <TripStatusBadge status={trip.status} />
-                  <span className="trip-card-id">Trip #{trip.id}</span>
+                  <span className="trip-card-id">{trip.trip_name ?? `Trip #${trip.id}`}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span className="trip-card-date">{fmtDate(trip.created_at)} · {fmtTime(trip.created_at)}</span>
@@ -2183,7 +2183,7 @@ function OfferHistoryTab() {
             <div className="chat-sheet-header">
               <button className="chat-sheet-back" onClick={() => setChatTripId(null)}>←</button>
               <div className="chat-sheet-info">
-                <div className="chat-sheet-title">Trip #{chatTrip.id}</div>
+                <div className="chat-sheet-title">{chatTrip.trip_name ?? `Trip #${chatTrip.id}`}</div>
                 <div className="chat-sheet-desc">{chatTrip.pickup_address} → {chatTrip.destination_address}</div>
               </div>
               <div className="thco-status"><TripStatusBadge status={chatTrip.status} /></div>
@@ -2210,7 +2210,7 @@ function OfferHistoryTab() {
               <div className="trip-card-head">
                 <div className="trip-card-head-left">
                   <TripStatusBadge status={trip.status} />
-                  <span className="trip-card-id">Trip #{trip.id}</span>
+                  <span className="trip-card-id">{trip.trip_name ?? `Trip #${trip.id}`}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <span className="trip-card-date">{fmtDate(trip.created_at)} · {fmtTime(trip.created_at)}</span>

@@ -46,6 +46,7 @@ class Trip(Base):
     driver_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("drivers.id"), nullable=True
     )
+    trip_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     pickup_address: Mapped[str] = mapped_column(String(500), nullable=False)
     pickup_lat: Mapped[Optional[float]] = mapped_column(nullable=True)
     pickup_lng: Mapped[Optional[float]] = mapped_column(nullable=True)

@@ -59,6 +59,7 @@ class DriverSummary(BaseModel):
 
 class TripOut(BaseModel):
     id: int
+    trip_name: Optional[str] = None
     rider_id: int
     driver_id: Optional[int] = None
     pickup_address: str
@@ -104,6 +105,7 @@ def build_trip_out(trip: "Trip") -> TripOut:
 
     return TripOut(
         id=trip.id,
+        trip_name=trip.trip_name,
         rider_id=trip.rider_id,
         driver_id=trip.driver_id,
         pickup_address=trip.pickup_address,

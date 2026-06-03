@@ -1,6 +1,22 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
+
+_SW_DAYS   = ['Jumatatu','Jumanne','Jumatano','Alhamisi','Ijumaa','Jumamosi','Jumapili']
+_SW_MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ago','Sep','Okt','Nov','Des']
+
+
+def _make_trip_name(pickup: str, dest: str, dt: datetime) -> str:
+    def shorten(addr: str) -> str:
+        for sep in [',', '/', ' - ', '(']:
+            if sep in addr:
+                addr = addr.split(sep)[0].strip()
+                break
+        return addr[:22]
+
+    day   = _SW_DAYS[dt.weekday()]
+    month = _SW_MONTHS[dt.month - 1]
+    return f"{shorten(pickup)} → {shorten(dest)} · {day} {dt.day} {month} {dt.year} {dt.strftime('%H:%M')}"
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -123,7 +139,9 @@ class TripService:
 
         await self._check_no_active_trip(rider_profile_id)
 
+        now = datetime.now(timezone.utc)
         trip = Trip(
+            trip_name=_make_trip_name(data.pickup_address.strip(), data.destination_address.strip(), now),
             rider_id=rider_profile_id,
             driver_id=None,
             pickup_address=data.pickup_address.strip(),
@@ -170,6 +188,7 @@ class TripService:
         # Publish MQTT event — drivers receive this instantly
         await publish_ride_requested({
             "trip_id":             trip.id,
+            "trip_name":           trip.trip_name,
             "rider_id":            trip.rider_id,
             "pickup_address":      trip.pickup_address,
             "pickup_lat":          trip.pickup_lat,

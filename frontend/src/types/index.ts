@@ -145,6 +145,7 @@ export type TripStatus =
 
 export interface Trip {
   id: number;
+  trip_name: string | null;
   rider_id: number;
   driver_id: number | null;
   pickup_address: string;
