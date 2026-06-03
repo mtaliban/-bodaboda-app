@@ -1,24 +1,15 @@
-# Caddy reads the domain from the CADDY_DOMAIN environment variable.
-# On EC2: CADDY_DOMAIN=3-85-53-81.sslip.io  →  Let's Encrypt cert, no browser warning.
-# Locally: CADDY_DOMAIN=localhost             →  Caddy local CA cert.
-{$CADDY_DOMAIN:localhost} {
+# HTTPS site — auto cert from Let's Encrypt (production) or Caddy local CA (dev)
+https://{$CADDY_DOMAIN:localhost} {
 
-    # MQTT WebSocket — proxied so browser can use wss:// without mixed-content block
     handle /mqtt {
         reverse_proxy mosquitto:9001
     }
-
-    # WebSocket: chat + WebRTC signaling
     handle /ws/* {
         reverse_proxy auth_service:8001
     }
-
-    # Driver service REST
     handle /driver/* {
         reverse_proxy driver_service:8002
     }
-
-    # Auth service REST
     handle /auth/* {
         reverse_proxy auth_service:8001
     }
@@ -40,16 +31,14 @@
     handle /frontend-metrics* {
         reverse_proxy auth_service:8001
     }
-
-    # Frontend SPA — catch-all
     handle {
         reverse_proxy frontend:80
     }
 }
 
-# Plain HTTP fallback — handles direct raw IP access (http://3.85.53.81).
-# Caddy owns port 80, so without this block the raw IP returns nothing.
-http://:80 {
+# Plain HTTP — direct raw IP access (http://3.85.53.81) works here.
+# Explicit https:// block above means no port-80 conflict.
+:80 {
     handle /ws/* {
         reverse_proxy auth_service:8001
     }
