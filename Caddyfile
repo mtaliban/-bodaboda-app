@@ -46,3 +46,38 @@
         reverse_proxy frontend:80
     }
 }
+
+# Plain HTTP fallback — handles direct raw IP access (http://3.85.53.81).
+# Caddy owns port 80, so without this block the raw IP returns nothing.
+http://:80 {
+    handle /ws/* {
+        reverse_proxy auth_service:8001
+    }
+    handle /driver/* {
+        reverse_proxy driver_service:8002
+    }
+    handle /auth/* {
+        reverse_proxy auth_service:8001
+    }
+    handle /trips/* {
+        reverse_proxy auth_service:8001
+    }
+    handle /drivers/* {
+        reverse_proxy auth_service:8001
+    }
+    handle /notifications/* {
+        reverse_proxy auth_service:8001
+    }
+    handle /health* {
+        reverse_proxy auth_service:8001
+    }
+    handle /metrics* {
+        reverse_proxy auth_service:8001
+    }
+    handle /frontend-metrics* {
+        reverse_proxy auth_service:8001
+    }
+    handle {
+        reverse_proxy frontend:80
+    }
+}
