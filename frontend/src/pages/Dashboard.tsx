@@ -1541,6 +1541,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const [driverPos, setDriverPos]     = useState<{lat:number;lng:number}|null>(null);
   const [chatOpen, setChatOpen]       = useState(false);
   const [declineToast, setDeclineToast] = useState<string | null>(null);
+  const [retrying, setRetrying]         = useState(false);
   const { user } = useAuth();
   const canCall = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
   const rtc = useWebRTCCall(canCall ? trip.id : null);
@@ -1602,6 +1603,26 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
     return () => clearInterval(interval);
   }, [trip.id, trip.status]);
 
+  // Hard 30-second search timeout: if still SEARCHING_DRIVER, cancel and show no-driver UI
+  useEffect(() => {
+    if (trip.status !== 'SEARCHING_DRIVER') return;
+    const timer = setTimeout(async () => {
+      try {
+        const { data } = await api.get<Trip>(`/trips/${trip.id}`);
+        if (data.status === 'SEARCHING_DRIVER') {
+          try { await api.post(`/trips/${trip.id}/cancel`); } catch {}
+          setTrip(prev => ({ ...prev, status: 'NO_DRIVER_AVAILABLE' }));
+        } else {
+          setTrip(data);
+          if (data.assigned_driver?.id) setDriverId(data.assigned_driver.id);
+        }
+      } catch {
+        setTrip(prev => ({ ...prev, status: 'NO_DRIVER_AVAILABLE' }));
+      }
+    }, 30000);
+    return () => clearTimeout(timer);
+  }, [trip.id, trip.status]);
+
   const cancel = async () => {
     setCancelling(true);
     try {
@@ -1609,6 +1630,25 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
       setTrip(data);
     } catch {}
     setCancelling(false);
+  };
+
+  const retryTrip = async () => {
+    setRetrying(true);
+    try {
+      const { data } = await api.post<Trip>('/trips/request', {
+        pickup_address: trip.pickup_address,
+        pickup_lat: trip.pickup_lat,
+        pickup_lng: trip.pickup_lng,
+        destination_address: trip.destination_address,
+        destination_lat: trip.destination_lat,
+        destination_lng: trip.destination_lng,
+        ride_type: trip.ride_type,
+        payment_method: trip.payment_method,
+      });
+      setTrip(data);
+      setDriverId(null);
+    } catch {}
+    setRetrying(false);
   };
 
   const canCancel   = ['SEARCHING_DRIVER', 'NO_DRIVER_AVAILABLE'].includes(trip.status);
@@ -1793,7 +1833,17 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
         {/* Action buttons */}
         <div className="tracking-actions">
           {['NO_DRIVER_AVAILABLE','CANCELLED'].includes(trip.status) && (
-            <button className="btn btn-primary btn-block" onClick={onNewTrip}>Jaribu Tena</button>
+            <div className="tracking-retry-row">
+              <button className="btn btn-primary tracking-retry-new" onClick={onNewTrip}>Ombi Jipya</button>
+              <button
+                className={`tracking-retry-icon${retrying ? ' spinning' : ''}`}
+                onClick={retryTrip}
+                disabled={retrying}
+                title="Jaribu tena na safari ile ile"
+              >
+                ↺
+              </button>
+            </div>
           )}
           {trip.status === 'COMPLETED' && (
             <button className="btn btn-primary btn-block" onClick={onNewTrip}>Safari Nyingine</button>

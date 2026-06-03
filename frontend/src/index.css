@@ -3860,6 +3860,45 @@ button.edit-back {
   flex-direction: column;
   gap: 0.5rem;
 }
+.tracking-retry-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.tracking-retry-new {
+  flex: 1;
+}
+.tracking-retry-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  background: var(--primary-light);
+  color: var(--primary);
+  font-size: 1.3rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s, transform 0.18s;
+}
+.tracking-retry-icon:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+  transform: rotate(-30deg) scale(1.08);
+}
+.tracking-retry-icon:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.tracking-retry-icon.spinning {
+  animation: spin360 0.7s linear infinite;
+}
+@keyframes spin360 {
+  to { transform: rotate(-360deg); }
+}
 
 /* ── Settings Page ──────────────────────────────────────────────────── */
 .settings-page {
