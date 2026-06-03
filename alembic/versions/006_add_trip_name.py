@@ -1,14 +1,14 @@
 """add trip_name column
 
 Revision ID: 006
-Revises: 005_add_driver_location
+Revises: 005
 Create Date: 2026-06-03
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "006"
-down_revision = "005_add_driver_location"
+down_revision = "005"
 branch_labels = None
 depends_on = None
 
