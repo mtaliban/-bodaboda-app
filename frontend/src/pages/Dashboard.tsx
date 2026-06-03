@@ -572,8 +572,17 @@ function useWebRTCCall(tripId: number | null) {
     return pc;
   };
 
+  const _checkSecureCtx = (): boolean => {
+    if (!window.isSecureContext || !navigator.mediaDevices) {
+      setMicError('Simu inahitaji HTTPS. Fungua https:// badala ya http:// kisha jaribu tena.');
+      return false;
+    }
+    return true;
+  };
+
   const call = async () => {
     if (callState !== 'idle') return;
+    if (!_checkSecureCtx()) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localRef.current = stream;
@@ -587,6 +596,7 @@ function useWebRTCCall(tripId: number | null) {
 
   const answer = async () => {
     if (!pendingSdp.current) return;
+    if (!_checkSecureCtx()) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localRef.current = stream;
@@ -638,9 +648,18 @@ function VoiceCallUI({ rtc, remoteName }: {
           <div className="call-name">Ruhusa ya Microphone</div>
           <div className="call-mic-msg">{rtc.micError}</div>
           <div className="call-mic-steps">
-            <p>1. Gonga icon ya 🔒 kwenye address bar</p>
-            <p>2. Ruhusu Microphone</p>
-            <p>3. Reload ukurasa kisha jaribu tena</p>
+            {!window.isSecureContext
+              ? <>
+                  <p>⚠️ Ukurasa huu uko kwenye HTTP</p>
+                  <p>Fungua: <strong>https://{window.location.hostname}</strong></p>
+                  <p>Kisha kukubali certificate na ujaribu tena</p>
+                </>
+              : <>
+                  <p>1. Gonga icon ya 🔒 kwenye address bar</p>
+                  <p>2. Ruhusu Microphone</p>
+                  <p>3. Reload ukurasa kisha jaribu tena</p>
+                </>
+            }
           </div>
           <div className="call-btns">
             <button className="call-btn call-btn-end" onClick={rtc.clearMicError}>Sawa</button>

@@ -1,7 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react';
 import mqtt, { MqttClient } from 'mqtt';
 
-const MQTT_WS_URL = `ws://${window.location.hostname}:9001`;
+// On HTTPS: route MQTT WebSocket through nginx at /mqtt (wss://)
+// On HTTP:  connect directly to Mosquitto port 9001 (ws://)
+const MQTT_WS_URL = window.location.protocol === 'https:'
+  ? `wss://${window.location.hostname}/mqtt`
+  : `ws://${window.location.hostname}:9001`;
 
 export interface MqttEvent {
   event_id: string;

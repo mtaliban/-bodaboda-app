@@ -43,8 +43,8 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
           build-args: |
-            VITE_API_BASE_URL=http://${{ secrets.EC2_HOST }}
-            VITE_DRIVER_SERVICE_URL=http://${{ secrets.EC2_HOST }}
+            VITE_API_BASE_URL=https://${{ secrets.EC2_HOST }}
+            VITE_DRIVER_SERVICE_URL=https://${{ secrets.EC2_HOST }}
 
   deploy-staging:
     needs: build-and-push

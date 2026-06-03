@@ -83,11 +83,12 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: http://${EC2_HOST:-localhost}
-        VITE_DRIVER_SERVICE_URL: http://${EC2_HOST:-localhost}
+        VITE_API_BASE_URL: https://${EC2_HOST:-localhost}
+        VITE_DRIVER_SERVICE_URL: https://${EC2_HOST:-localhost}
     image: ${DOCKER_USERNAME}/bodaboda-frontend:latest
     ports:
       - "80:80"
+      - "443:443"
     depends_on:
       - auth_service
     networks:
