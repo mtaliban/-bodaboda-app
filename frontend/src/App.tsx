@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import Home from './pages/Home';
@@ -19,6 +19,14 @@ function PageTracker() {
   return null;
 }
 
+// Redirect to dashboard if already logged in, otherwise show the public page.
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return null;
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -27,11 +35,11 @@ export default function App() {
         <Navbar />
         <main>
           <Routes>
-            {/* Public */}
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
+            {/* Public — redirect to dashboard if already logged in */}
+            <Route path="/" element={<PublicRoute><Home /></PublicRoute>} />
+            <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
 
             {/* Authenticated — single dashboard handles all tabs internally */}
             <Route
