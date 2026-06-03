@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('user');
     setUser(null);
     if (refreshToken) {
-      fetch(`${import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8001'}/auth/logout`, {
+      fetch(`${(import.meta.env.VITE_API_BASE_URL as string | undefined) ?? window.location.origin}/auth/logout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refresh_token: refreshToken }),

@@ -20,10 +20,12 @@ function PageTracker() {
 }
 
 // Redirect to dashboard if already logged in, otherwise show the public page.
+// Check isAuthenticated FIRST — it's set synchronously from localStorage on first
+// render, so a logged-in user redirects instantly with no flash of the public page.
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading) return null;
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  if (isLoading) return null;
   return <>{children}</>;
 }
 
