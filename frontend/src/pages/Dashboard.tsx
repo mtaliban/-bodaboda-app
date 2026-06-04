@@ -1667,11 +1667,12 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 }) {
   const [trip, setTrip]               = useState(initialTrip);
   const [cancelling, setCancelling]   = useState(false);
-  const [driverId, setDriverId]       = useState<number | null>(initialTrip.assigned_driver?.id ?? null);
-  const [approaching, setApproaching] = useState(false);
-  const [driverPos, setDriverPos]     = useState<{lat:number;lng:number}|null>(null);
-  const [chatOpen, setChatOpen]       = useState(false);
-  const [chatUnread, setChatUnread]   = useState(0);
+  const [driverId, setDriverId]         = useState<number | null>(initialTrip.assigned_driver?.id ?? null);
+  const [approaching, setApproaching]   = useState(false);
+  const [driverPos, setDriverPos]       = useState<{lat:number;lng:number}|null>(null);
+  const [liveLocPos, setLiveLocPos]     = useState<{lat:number;lng:number;time:string}|null>(null);
+  const [chatOpen, setChatOpen]         = useState(false);
+  const [chatUnread, setChatUnread]     = useState(0);
   const [declineToast, setDeclineToast] = useState<string | null>(null);
   const [retrying, setRetrying]         = useState(false);
   const { user } = useAuth();
@@ -1682,6 +1683,22 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const mqttTopics = ACTIVE_TRIP_STATUSES.includes(trip.status)
     ? [`rides/${trip.id}/status`]
     : [];
+
+  // Direct subscription to driver location topic — independent of map
+  const locTopics = driverId && ACTIVE_TRIP_STATUSES.includes(trip.status)
+    ? [`driver/${driverId}/location`]
+    : [];
+  useMqtt(locTopics, useCallback((event: MqttEvent) => {
+    if (event.event_type === 'DRIVER_LOCATION') {
+      const p = event.payload as Record<string, unknown>;
+      const lat = Number(p.lat);
+      const lng = Number(p.lng);
+      if (lat && lng) {
+        setLiveLocPos({ lat, lng, time: new Date().toLocaleTimeString() });
+        setDriverPos({ lat, lng });
+      }
+    }
+  }, []));
 
   useMqtt(mqttTopics, useCallback((event: MqttEvent) => {
     const p = event.payload as Record<string, unknown>;
@@ -1894,13 +1911,13 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           <p>{statusDescs[trip.status] ?? trip.message}</p>
         </div>
 
-        {/* Driver live location text — visible MQTT data (Option B) */}
-        {driverPos && ['DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS'].includes(trip.status) && (
+        {/* Driver live location text — Option B live MQTT data */}
+        {liveLocPos && ['DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS'].includes(trip.status) && (
           <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'10px', padding:'0.6rem 0.9rem', fontSize:'0.82rem', display:'flex', flexDirection:'column', gap:'0.2rem' }}>
-            <span style={{ fontWeight:700, color:'#15803d' }}>📡 MQTT — driver/{trip.assigned_driver?.id ?? '?'}/location</span>
-            <span style={{ color:'#166534' }}>Latitude &nbsp;: <strong>{driverPos.lat.toFixed(6)}</strong></span>
-            <span style={{ color:'#166534' }}>Longitude: <strong>{driverPos.lng.toFixed(6)}</strong></span>
-            <span style={{ color:'#6b7280', fontSize:'0.75rem' }}>Imesasishwa: {new Date().toLocaleTimeString()}</span>
+            <span style={{ fontWeight:700, color:'#15803d' }}>📡 MQTT Live — driver/{driverId}/location</span>
+            <span style={{ color:'#166534' }}>Latitude &nbsp;: <strong>{liveLocPos.lat.toFixed(6)}</strong></span>
+            <span style={{ color:'#166534' }}>Longitude: <strong>{liveLocPos.lng.toFixed(6)}</strong></span>
+            <span style={{ color:'#6b7280', fontSize:'0.75rem' }}>Imesasishwa: {liveLocPos.time}</span>
           </div>
         )}
 
