@@ -35,6 +35,11 @@ export default function AdminPage() {
   const [loading,  setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+  const [editForm, setEditForm] = useState({ full_name: '', email: '', phone: '' });
+  const [resetPwdUser, setResetPwdUser] = useState<AdminUser | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -98,6 +103,26 @@ export default function AdminPage() {
   const updateUserStatus = async (userId: number, status: 'active' | 'suspended') => {
     await axios.patch(`${ADMIN_API}/admin/users/${userId}/status`, { status }, { headers });
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status } : u));
+  };
+
+  const saveEditUser = async () => {
+    if (!editUser) return;
+    try {
+      await axios.patch(`${ADMIN_API}/admin/users/${editUser.id}/profile`, editForm, { headers });
+      setUsers(prev => prev.map(u => u.id === editUser.id ? { ...u, ...editForm } : u));
+      setEditUser(null);
+      setActionMsg('Taarifa zimehifadhiwa.');
+    } catch { setActionMsg('Hitilafu ya kuhifadhi.'); }
+  };
+
+  const doResetPassword = async () => {
+    if (!resetPwdUser) return;
+    try {
+      await axios.post(`${ADMIN_API}/admin/users/${resetPwdUser.id}/reset-password`, { password: newPassword }, { headers });
+      setResetPwdUser(null);
+      setNewPassword('');
+      setActionMsg('Nywila imebadilishwa.');
+    } catch { setActionMsg('Hitilafu ya kubadilisha nywila.'); }
   };
 
   const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -181,6 +206,14 @@ export default function AdminPage() {
                         ? <button onClick={() => updateUserStatus(u.id, 'suspended')} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', padding: '0.25rem 0.6rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>Suspend</button>
                         : <button onClick={() => updateUserStatus(u.id, 'active')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.25rem 0.6rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>Activate</button>
                       }
+                      <button onClick={() => { setEditUser(u); setEditForm({ full_name: u.full_name, email: u.email, phone: u.phone }); }}
+                        style={{ marginLeft: 4, padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                        ✏️ Edit
+                      </button>
+                      <button onClick={() => setResetPwdUser(u)}
+                        style={{ marginLeft: 4, padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: '#6b7280', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+                        🔑 Nywila
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -249,28 +282,85 @@ export default function AdminPage() {
         )}
 
         {/* Events */}
-        {tab === 'events' && (
+        {!loading && tab === 'events' && (
           <div>
-            <div style={{ marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 700, color: '#374151' }}>Real-time MQTT Events</span>
-              <button onClick={() => setEvents([])} style={{ background: '#f3f4f6', border: 'none', padding: '0.35rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.8rem' }}>Futa Yote</button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '70vh', overflowY: 'auto' }}>
-              {events.length === 0 && <div style={{ color: '#9ca3af', textAlign: 'center', padding: '3rem' }}>Inasubiri events…</div>}
-              {events.map((ev, i) => (
-                <div key={i} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.65rem 0.875rem', fontSize: '0.8rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                    <span style={{ fontWeight: 700, color: '#FF6B00' }}>{ev.event_type ?? ev.topic}</span>
-                    <span style={{ color: '#9ca3af' }}>{new Date(ev.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                  <div style={{ color: '#374151' }}>{ev.topic}</div>
-                  <pre style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{JSON.stringify(ev, null, 2)}</pre>
-                </div>
-              ))}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ background: '#1e293b', color: '#fff' }}>
+                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Wakati</th>
+                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Topic</th>
+                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Event Type</th>
+                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Trip ID</th>
+                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Maelezo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events.length === 0 && (
+                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Hakuna events bado — subiri ujumbe wa MQTT…</td></tr>
+                  )}
+                  {events.map((ev, i) => {
+                    const payload = ev.payload as Record<string, unknown> | undefined;
+                    const tripId = payload?.trip_id as number | undefined;
+                    const details = payload ? Object.entries(payload)
+                      .filter(([k]) => !['trip_id'].includes(k))
+                      .map(([k, v]) => `${k}: ${v}`)
+                      .join(' · ') : '';
+                    return (
+                      <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '0.5rem 0.75rem', color: '#6b7280', whiteSpace: 'nowrap' }}>
+                          {new Date(ev.timestamp).toLocaleTimeString()}
+                        </td>
+                        <td style={{ padding: '0.5rem 0.75rem' }}>
+                          <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, fontSize: '0.78rem' }}>{ev.topic}</code>
+                        </td>
+                        <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#FF6B00' }}>{ev.event_type ?? '—'}</td>
+                        <td style={{ padding: '0.5rem 0.75rem', color: '#3b82f6' }}>{tripId ?? '—'}</td>
+                        <td style={{ padding: '0.5rem 0.75rem', color: '#374151', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{details}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
       </div>
+
+      {editUser && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '1.5rem', width: 340, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>✏️ Hariri Taarifa — {editUser.full_name}</h3>
+            <input placeholder="Jina kamili" value={editForm.full_name} onChange={e => setEditForm(p => ({ ...p, full_name: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: '0.85rem' }} />
+            <input placeholder="Email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: '0.85rem' }} />
+            <input placeholder="Simu" value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: '0.85rem' }} />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={saveEditUser} style={{ flex: 1, padding: '0.6rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
+              <button onClick={() => setEditUser(null)} style={{ flex: 1, padding: '0.6rem', background: '#f3f4f6', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Funga</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetPwdUser && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '1.5rem', width: 320, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>🔑 Weka Nywila Mpya — {resetPwdUser.full_name}</h3>
+            <input placeholder="Nywila mpya (min 6)" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} style={{ padding: '0.6rem', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: '0.85rem' }} />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={doResetPassword} style={{ flex: 1, padding: '0.6rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Badilisha</button>
+              <button onClick={() => setResetPwdUser(null)} style={{ flex: 1, padding: '0.6rem', background: '#f3f4f6', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Funga</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {actionMsg && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#1e293b', color: '#fff', padding: '0.75rem 1.25rem', borderRadius: 8, fontSize: '0.85rem', zIndex: 2000 }}
+          onClick={() => setActionMsg('')}>
+          {actionMsg}
+        </div>
+      )}
     </div>
   );
 }

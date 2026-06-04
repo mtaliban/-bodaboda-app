@@ -79,7 +79,7 @@ class AuthService:
         if user.status == UserStatus.suspended:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Account suspended",
+                detail="Akaunti yako imefungiwa. Wasiliana na msimamizi.",
             )
 
         if not user.is_verified:

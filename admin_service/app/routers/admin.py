@@ -141,6 +141,33 @@ async def update_user_status(user_id: int, body: dict, db: AsyncSession = Depend
     return {"ok": True, "status": new_status}
 
 
+# ── Edit User Profile ─────────────────────────────────────────────────────────
+@router.patch("/users/{user_id}/profile", dependencies=[Depends(verify_admin_token)])
+async def edit_user_profile(user_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    fields = {k: v for k, v in body.items() if k in ("full_name", "email", "phone")}
+    if not fields:
+        raise HTTPException(status_code=400, detail="No valid fields")
+    set_clause = ", ".join(f"{k} = :{k}" for k in fields)
+    fields["uid"] = user_id
+    await db.execute(text(f"UPDATE users SET {set_clause} WHERE id = :uid"), fields)
+    await db.commit()
+    return {"ok": True}
+
+
+# ── Reset User Password ───────────────────────────────────────────────────────
+@router.post("/users/{user_id}/reset-password", dependencies=[Depends(verify_admin_token)])
+async def reset_user_password(user_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    new_password = body.get("password", "")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password lazima iwe na herufi 6+")
+    from passlib.context import CryptContext
+    pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    hashed = pwd_ctx.hash(new_password)
+    await db.execute(text("UPDATE users SET password_hash = :h WHERE id = :id"), {"h": hashed, "id": user_id})
+    await db.commit()
+    return {"ok": True}
+
+
 # ── WebSocket — real-time event feed ─────────────────────────────────────────
 @router.websocket("/ws")
 async def admin_ws(websocket: WebSocket):

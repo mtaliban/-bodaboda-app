@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Alert from '../components/Alert';
-import { AxiosError } from 'axios';
+import axios, { AxiosError } from 'axios';
 import { trackClick } from '../metrics';
 
 function extractApiError(err: unknown): string {
@@ -34,7 +34,14 @@ export default function Login() {
       await login({ email_or_phone: emailOrPhone, password });
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(extractApiError(err));
+      // Try admin login
+      try {
+        const { data } = await axios.post('/admin-api/admin/login', { username: emailOrPhone, password });
+        localStorage.setItem('admin_token', data.access_token);
+        navigate('/admin', { replace: true });
+      } catch {
+        setError(extractApiError(err));
+      }
     } finally {
       setIsLoading(false);
     }
