@@ -7,8 +7,8 @@ Create Date: 2026-06-04
 from alembic import op
 import sqlalchemy as sa
 
-revision = '008_wallet'
-down_revision = '007_chat_messages'
+revision = '008'
+down_revision = '007'
 branch_labels = None
 depends_on = None
 
