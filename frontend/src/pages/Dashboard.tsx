@@ -332,7 +332,15 @@ function TrackSteps({ status }: { status: string }) {
 }
 
 // ── Trip Chat (MQTT — Rider ↔ Driver) ─────────────────────────────────
-interface ChatMsg { sender: string; senderName: string; message: string; time: string; }
+type ChatMsg = {
+  id?: number | string;
+  sender: string;
+  senderName: string;
+  message: string;
+  image_url?: string;
+  time: string;
+  read_at?: string | null;
+};
 
 const chatKey = (id: number) => `boda_chat_${id}`;
 
@@ -344,11 +352,26 @@ function saveChat(tripId: number, msgs: ChatMsg[]) {
 }
 
 function TripChat({ tripId, myRole, onNewMessage }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; myName: string; onNewMessage?: () => void }) {
-  const [messages, setMessages] = useState<ChatMsg[]>(() => loadChat(tripId));
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [wsState, setWsState] = useState<'connecting' | 'open' | 'closed'>('connecting');
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // Load history from API
+  useEffect(() => {
+    api.get<ChatMsg[]>(`/chat/${tripId}/history`).then(({ data }) => {
+      setMessages(data.map(m => ({
+        id: m.id,
+        sender: (m as unknown as Record<string, string>).role,
+        senderName: (m as unknown as Record<string, string>).name,
+        message: (m as unknown as Record<string, string>).text ?? '',
+        image_url: m.image_url,
+        time: m.time,
+        read_at: m.read_at,
+      })));
+    }).catch(() => setMessages(loadChat(tripId)));
+  }, [tripId]);
 
   useEffect(() => {
     const token = encodeURIComponent(localStorage.getItem('access_token') ?? '');
@@ -362,9 +385,13 @@ function TripChat({ tripId, myRole, onNewMessage }: { tripId: number; myRole: 'R
       try {
         const d = JSON.parse(e.data as string);
         if (d.type === 'message') {
-          const msg: ChatMsg = { sender: d.role, senderName: d.name, message: d.text, time: d.time };
+          const msg: ChatMsg = { id: d.id, sender: d.role, senderName: d.name, message: d.text ?? '', image_url: d.image_url, time: d.time, read_at: d.read_at };
           setMessages(prev => { const u = [...prev, msg]; saveChat(tripId, u); return u; });
           if (d.role !== myRole) onNewMessage?.();
+        } else if (d.type === 'deleted') {
+          setMessages(prev => prev.filter(m => String(m.id) !== String(d.id)));
+        } else if (d.type === 'read_by') {
+          setMessages(prev => prev.map(m => m.sender === myRole && !m.read_at ? { ...m, read_at: d.at } : m));
         }
       } catch { /* ignore */ }
     };
@@ -380,33 +407,70 @@ function TripChat({ tripId, myRole, onNewMessage }: { tripId: number; myRole: 'R
     setInput('');
   };
 
+  const deleteMsg = (msg: ChatMsg) => {
+    if (msg.sender !== myRole || !msg.id) return;
+    wsRef.current?.send(JSON.stringify({ type: 'delete', id: msg.id }));
+    setMessages(prev => prev.filter(m => m.id !== msg.id));
+  };
+
+  const groupByDate = (msgs: ChatMsg[]) => {
+    const groups: { label: string; msgs: ChatMsg[] }[] = [];
+    let lastDate = '';
+    for (const m of msgs) {
+      const d = new Date(m.time);
+      const today = new Date();
+      const yest = new Date(); yest.setDate(today.getDate() - 1);
+      const label = d.toDateString() === today.toDateString() ? 'Leo' :
+                    d.toDateString() === yest.toDateString() ? 'Jana' :
+                    d.toLocaleDateString('sw-TZ', { day: 'numeric', month: 'short', year: 'numeric' });
+      if (label !== lastDate) { groups.push({ label, msgs: [] }); lastDate = label; }
+      groups[groups.length - 1].msgs.push(m);
+    }
+    return groups;
+  };
+
   return (
     <div className="trip-chat">
       <div className="tc-header">
         💬 Chat — {myRole === 'RIDER' ? 'Dereva' : 'Abiria'}
-        <span className={`tc-ws-dot tc-ws-${wsState}`} title={wsState === 'open' ? 'Connected' : wsState === 'connecting' ? 'Connecting…' : 'Offline'} />
+        <span className={`tc-ws-dot tc-ws-${wsState}`} title={wsState} />
       </div>
       <div className="tc-messages">
         {messages.length === 0
           ? <span className="tc-empty">Hakuna ujumbe bado. Sema hujambo! 👋</span>
-          : messages.map((m, i) => {
-              const isMine = m.sender === myRole;
-              const isFirst = i === 0 || messages[i - 1].sender !== m.sender;
-              return (
-                <div key={i} className={`tc-msg ${isMine ? 'tc-msg-mine' : 'tc-msg-theirs'}`}>
-                  {!isMine && isFirst && <span className="tc-msg-name">{m.senderName}</span>}
-                  <span className="tc-msg-bubble">
-                    {m.message}
-                    <span className="tc-msg-time">{fmtChatTime(m.time)}</span>
-                  </span>
-                </div>
-              );
-            })
+          : groupByDate(messages).map((group, gi) => (
+              <div key={gi}>
+                <div className="tc-date-sep"><span>{group.label}</span></div>
+                {group.msgs.map((m, i) => {
+                  const isMine = m.sender === myRole;
+                  const prevMsg = group.msgs[i - 1];
+                  const showName = !isMine && (!prevMsg || prevMsg.sender !== m.sender);
+                  const time = new Date(m.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                  const isRead = !!m.read_at;
+                  return (
+                    <div key={m.id ?? i} className={`tc-msg ${isMine ? 'tc-msg-mine' : 'tc-msg-theirs'}`}>
+                      {showName && <span className="tc-msg-name">{m.senderName}</span>}
+                      <div className="tc-msg-bubble" onDoubleClick={() => isMine && deleteMsg(m)}>
+                        {m.image_url && <img src={m.image_url} alt="attachment" className="tc-msg-img" />}
+                        {m.message && <span className="tc-msg-text">{m.message}</span>}
+                        <div className="tc-msg-footer">
+                          <span className="tc-msg-time">{time}</span>
+                          {isMine && (
+                            <span className={`tc-ticks ${isRead ? 'tc-ticks-read' : ''}`}>
+                              {isRead ? '✓✓' : '✓'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))
         }
         <div ref={bottomRef} />
       </div>
       <div className="tc-input-row">
-        <span className="tc-attach-icon">📎</span>
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -418,6 +482,7 @@ function TripChat({ tripId, myRole, onNewMessage }: { tripId: number; myRole: 'R
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
       </div>
+      {wsState === 'open' && <div className="tc-hint">Bonyeza mara mbili ujumbe wako kuufuta</div>}
     </div>
   );
 }
@@ -2022,6 +2087,51 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   );
 }
 
+// ── Fare Estimate ─────────────────────────────────────────────────────
+
+function FareEstimate({ pickup, destination }: { pickup: MapLocation; destination: MapLocation }) {
+  const [estimate, setEstimate] = useState<{ distance_km: number; eta_minutes: number; fare_tzs: number } | null>(null);
+
+  useEffect(() => {
+    api.get('/trips/estimate', { params: {
+      pickup_lat: pickup.lat, pickup_lng: pickup.lng,
+      dest_lat: destination.lat, dest_lng: destination.lng,
+    }}).then(({ data }) => setEstimate(data)).catch(() => {});
+  }, [pickup.lat, pickup.lng, destination.lat, destination.lng]);
+
+  return (
+    <div className="fare-estimate-box">
+      <div className="fare-row">
+        <span className="fare-label">📍 Kutoka</span>
+        <span className="fare-value">{pickup.name}</span>
+      </div>
+      <div className="fare-row">
+        <span className="fare-label">🏁 Kwenda</span>
+        <span className="fare-value">{destination.name}</span>
+      </div>
+      {estimate ? (
+        <>
+          <div className="fare-divider" />
+          <div className="fare-row">
+            <span className="fare-label">📏 Umbali</span>
+            <span className="fare-value">{estimate.distance_km} km</span>
+          </div>
+          <div className="fare-row">
+            <span className="fare-label">⏱️ Muda</span>
+            <span className="fare-value">~{estimate.eta_minutes} dakika</span>
+          </div>
+          <div className="fare-row fare-row-price">
+            <span className="fare-label">💵 Bei ya Safari</span>
+            <span className="fare-price">TSh {estimate.fare_tzs.toLocaleString()}</span>
+          </div>
+        </>
+      ) : (
+        <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: '0.8rem', padding: '0.5rem' }}>Inakokotoa bei…</div>
+      )}
+    </div>
+  );
+}
+
 // ── Request Ride Tab (RIDER only) ─────────────────────────────────────
 
 function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
@@ -2088,26 +2198,8 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
               onDestinationChange={setDestination}
             />
 
-            {/* Summary row */}
             {pickup && destination && (
-              <div className="ride-summary-box" style={{ marginTop: '1rem' }}>
-                <div className="ride-summary-row">
-                  <span className="ride-summary-label">From</span>
-                  <span className="ride-summary-value" style={{ fontSize: '0.85rem' }}>{pickup.name}</span>
-                </div>
-                <div className="ride-summary-row">
-                  <span className="ride-summary-label">To</span>
-                  <span className="ride-summary-value" style={{ fontSize: '0.85rem' }}>{destination.name}</span>
-                </div>
-                <div className="ride-summary-row">
-                  <span className="ride-summary-label">Ride Type</span>
-                  <span className="ride-summary-value">🏍️ BodaBoda</span>
-                </div>
-                <div className="ride-summary-row">
-                  <span className="ride-summary-label">Payment</span>
-                  <span className="ride-summary-value">💵 Cash</span>
-                </div>
-              </div>
+              <FareEstimate pickup={pickup} destination={destination} />
             )}
 
             <button

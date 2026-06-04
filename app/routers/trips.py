@@ -1,3 +1,5 @@
+import math as _math
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,6 +10,28 @@ from app.schemas.trip import TripRequest, TripOut, build_trip_out
 from app.services.trip_service import TripService
 
 router = APIRouter()
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    dlat = _math.radians(lat2 - lat1)
+    dlng = _math.radians(lng2 - lng1)
+    a = _math.sin(dlat/2)**2 + _math.cos(_math.radians(lat1)) * _math.cos(_math.radians(lat2)) * _math.sin(dlng/2)**2
+    return R * 2 * _math.asin(_math.sqrt(a))
+
+
+@router.get("/trips/estimate")
+async def estimate_trip(
+    pickup_lat: float,
+    pickup_lng: float,
+    dest_lat: float,
+    dest_lng: float,
+):
+    km = _haversine_km(pickup_lat, pickup_lng, dest_lat, dest_lng)
+    km = round(km, 2)
+    eta_min = max(1, round(km / 25 * 60))
+    fare = max(1500, round(1000 + 400 * km, -1))
+    return {"distance_km": km, "eta_minutes": eta_min, "fare_tzs": int(fare)}
 
 
 @router.post("/request", response_model=TripOut, status_code=201)

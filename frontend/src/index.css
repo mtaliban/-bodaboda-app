@@ -3271,123 +3271,181 @@ button.edit-back {
 }
 .tsv-call-btn:hover { background: #059669; color: #fff; }
 
-/* ── Trip Chat ───────────────────────────────────────────────────────── */
+/* ═══════════════════════ CHAT — WhatsApp-like ═══════════════════════ */
 .trip-chat {
-  border: 1.5px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  height: 420px;
+  max-height: 55vh;
   border-radius: 14px;
   overflow: hidden;
-  margin-top: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  background: #ece5dd;
+  border: 1px solid #d1d5db;
 }
+
 .tc-header {
-  background: linear-gradient(90deg, var(--primary), #e07020);
-  padding: 0.6rem 1rem;
-  font-size: 0.85rem;
-  font-weight: 700;
+  background: var(--primary);
   color: #fff;
-  letter-spacing: 0.01em;
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
+
+.tc-ws-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-left: auto;
+  background: #9ca3af;
+  transition: background 0.3s;
+}
+.tc-ws-open        { background: #4ade80; }
+.tc-ws-connecting  { background: #fbbf24; }
+.tc-ws-closed      { background: #f87171; }
+
 .tc-messages {
   flex: 1;
-  min-height: 180px;
-  max-height: 320px;
   overflow-y: auto;
-  padding: 0.875rem 0.875rem 0.5rem;
+  padding: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  background: #f0f2f5;
+  gap: 2px;
+  background: #ece5dd url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4c5b0' fill-opacity='0.25'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
+.tc-messages::-webkit-scrollbar { width: 4px; }
+.tc-messages::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+
+.tc-date-sep {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0.5rem 0;
+}
+.tc-date-sep span {
+  background: rgba(255,255,255,0.85);
+  color: #374151;
+  font-size: 0.72rem;
+  padding: 2px 10px;
+  border-radius: 99px;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
 .tc-empty {
   color: #9ca3af;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   text-align: center;
   margin: auto;
+  padding: 2rem;
 }
+
 .tc-msg {
   display: flex;
   flex-direction: column;
   max-width: 78%;
 }
-.tc-msg-mine   { align-self: flex-end;   align-items: flex-end;   }
+.tc-msg-mine   { align-self: flex-end;   align-items: flex-end; }
 .tc-msg-theirs { align-self: flex-start; align-items: flex-start; }
+
 .tc-msg-name {
-  font-size: 0.7rem;
-  color: #6b7280;
-  margin-bottom: 3px;
-  margin-left: 6px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-size: 0.72rem;
+  color: var(--primary);
+  font-weight: 700;
+  margin-bottom: 2px;
+  padding-left: 4px;
 }
+
 .tc-msg-bubble {
+  padding: 0.45rem 0.75rem 0.3rem;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  line-height: 1.4;
   position: relative;
-  padding: 0.6rem 1rem 0.45rem;
-  border-radius: 18px;
-  font-size: 0.92rem;
-  line-height: 1.5;
   word-break: break-word;
-  min-width: 70px;
+  cursor: default;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
 }
 .tc-msg-mine .tc-msg-bubble {
   background: #dcf8c6;
-  color: #1a2e1a;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
-}
-.tc-msg-mine .tc-msg-bubble::after {
-  content: '';
-  position: absolute;
-  bottom: 0; right: -7px;
-  width: 0; height: 0;
-  border-left: 8px solid #dcf8c6;
-  border-bottom: 8px solid transparent;
+  border-bottom-right-radius: 3px;
 }
 .tc-msg-theirs .tc-msg-bubble {
   background: #fff;
-  color: #1f2937;
-  border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+  border-bottom-left-radius: 3px;
 }
-.tc-msg-theirs .tc-msg-bubble::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: -7px;
-  width: 0; height: 0;
-  border-right: 8px solid #fff;
-  border-bottom: 8px solid transparent;
+
+.tc-msg-img {
+  max-width: 200px;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 4px;
 }
-.tc-msg-time {
-  font-size: 0.65rem;
-  opacity: 0.55;
-  text-align: right;
-  margin-top: 3px;
-  white-space: nowrap;
-}
-.tc-input-row {
+
+.tc-msg-text { display: block; }
+
+.tc-msg-footer {
   display: flex;
   align-items: center;
-  background: #f0f2f5;
-  padding: 0.5rem 0.65rem;
-  gap: 0.5rem;
+  gap: 3px;
+  justify-content: flex-end;
+  margin-top: 2px;
+}
+.tc-msg-time {
+  font-size: 0.68rem;
+  color: #6b7280;
+}
+.tc-ticks {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-weight: 700;
+}
+.tc-ticks-read { color: var(--primary); }
+
+.tc-hint {
+  text-align: center;
+  font-size: 0.68rem;
+  color: #9ca3af;
+  padding: 2px 0 4px;
+  background: #ece5dd;
   flex-shrink: 0;
+}
+
+.tc-input-row {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #f0f0f0;
+  flex-shrink: 0;
+  align-items: center;
 }
 .tc-input-row input {
   flex: 1;
+  padding: 0.55rem 0.875rem;
   border: none;
-  outline: none;
-  padding: 0.55rem 1rem;
+  border-radius: 24px;
   font-size: 0.9rem;
+  outline: none;
   background: #fff;
-  color: #1f2937;
-  border-radius: 22px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.10);
-  transition: box-shadow 0.15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
-.tc-input-row input:focus { box-shadow: 0 1px 6px rgba(0,0,0,0.18); }
-.tc-input-row input::placeholder { color: #adb5bd; }
-/* .tc-send-btn styles now in the ChatPanel section below */
+.tc-send-btn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.tc-send-btn:hover:not(:disabled) { background: #e05a00; }
+.tc-send-btn:disabled { background: #d1d5db; cursor: not-allowed; }
 
 /* ── Trip Live Map ───────────────────────────────────────────────────── */
 .trip-live-map-wrap {
@@ -4092,19 +4150,6 @@ button.edit-back {
 .driver-trip-map { height: 220px; border-radius: 10px; overflow: hidden; margin: 0.75rem 0; }
 @media (min-width: 640px) { .driver-trip-map { height: 280px; } }
 
-/* ── WebSocket connection status dot ─────────────────────────────── */
-.tc-ws-dot {
-  display: inline-block;
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  margin-left: 0.5rem;
-  vertical-align: middle;
-  flex-shrink: 0;
-}
-.tc-ws-open       { background: #22c55e; }
-.tc-ws-connecting { background: #f59e0b; animation: pulse-dot 1.4s infinite; }
-.tc-ws-closed     { background: #ef4444; }
-
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.3; }
@@ -4244,12 +4289,7 @@ button.chat-sheet-call {
 }
 button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
 
-/* ── Improved tc-header with flex for status dot ─────────────────── */
-.tc-header {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
+/* tc-header flex/dot defined in WhatsApp-like CHAT section above */
 
 /* ── Driver-decline toast ─────────────────────────────────────────── */
 .decline-toast {
@@ -4372,35 +4412,7 @@ button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
   flex-shrink: 0;
 }
 
-/* ── Input row improvements (paperclip + send circle) ───────────────── */
-.tc-attach-icon {
-  font-size: 1.15rem;
-  color: #6b7280;
-  flex-shrink: 0;
-  cursor: pointer;
-  padding: 0.2rem;
-  transition: color 0.15s;
-  line-height: 1;
-}
-.tc-attach-icon:hover { color: var(--primary); }
-
-.tc-send-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #25d366;
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: background 0.2s, transform 0.1s;
-  box-shadow: 0 2px 8px rgba(37,211,102,0.4);
-}
-.tc-send-btn:hover { background: #1ebe5c; transform: scale(1.08); }
-.tc-send-btn:disabled { background: #d1d5db; cursor: not-allowed; transform: none; box-shadow: none; }
+/* tc-attach-icon and tc-send-btn are defined in the WhatsApp-like CHAT section above */
 
 /* ── Microphone error card (replaces alert) ─────────────────────────── */
 .call-mic-icon {
@@ -4544,4 +4556,54 @@ button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
 @keyframes banner-slide-down {
   from { transform: translateY(-100%); }
   to   { transform: translateY(0); }
+}
+
+/* ═══════════════════════ FARE ESTIMATE ═══════════════════════ */
+.fare-estimate-box {
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.fare-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.fare-label { color: #6b7280; }
+.fare-value { font-weight: 600; color: #111; text-align: right; max-width: 60%; }
+.fare-divider { height: 1px; background: #f3f4f6; margin: 0.25rem 0; }
+.fare-row-price { margin-top: 0.25rem; }
+.fare-price {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+/* ═══════════════════════ RESPONSIVE ═══════════════════════ */
+@media (max-width: 640px) {
+  .dashboard-layout { flex-direction: column; }
+  .dashboard-sidebar { width: 100%; flex-direction: row; overflow-x: auto; padding: 0.5rem; gap: 0.25rem; }
+  .sidebar-nav-item { flex-direction: column; font-size: 0.7rem; padding: 0.5rem 0.6rem; min-width: 60px; }
+  .sidebar-nav-icon { font-size: 1.2rem; }
+  .sidebar-nav-label { display: block !important; font-size: 0.65rem; }
+  .dashboard-content { padding: 0.75rem; }
+  .trip-chat { height: 380px; max-height: 60vh; }
+  .tc-msg { max-width: 88%; }
+  .edit-card { margin: 0; border-radius: 12px; }
+  .current-trip-card { padding: 0.875rem; }
+  .tracking-map-area { flex: 0 0 220px; min-height: 220px; }
+  .fare-estimate-box { padding: 0.75rem; }
+  .auth-card { margin: 1rem; }
+}
+
+@media (max-width: 480px) {
+  .tc-msg { max-width: 92%; }
+  .tc-msg-bubble { font-size: 0.82rem; }
+  .trip-chat { height: 320px; }
 }
