@@ -720,42 +720,36 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const { publish: publishLoc } = useMqtt(locTopics, useCallback(() => {}, []));
   const { publish: publishStatusEvt } = useMqtt([], useCallback(() => {}, []));
 
-  // Publish GPS via MQTT (real-time map on rider side) + REST (backend storage)
+  // Publish GPS via MQTT every 5 seconds — rider sees real location as text
   useEffect(() => {
     const driverId = trip.driver_id;
     if (!isActive || !navigator.geolocation || !driverId) return;
 
-    const send = (lat: number, lng: number) => {
-      // Only publish if driver actually moved more than ~8 m
-      const prev = prevLocRef.current;
-      if (prev && Math.abs(lat - prev.lat) < 0.00007 && Math.abs(lng - prev.lng) < 0.00007) return;
-      prevLocRef.current = { lat, lng };
+    const publishGps = () => {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          const { latitude: lat, longitude: lng } = coords;
+          prevLocRef.current = { lat, lng };
 
-      // MQTT — rider's map updates instantly
-      publishLoc(`driver/${driverId}/location`, {
-        event_id:   `loc_${Date.now()}`,
-        event_type: 'DRIVER_LOCATION',
-        timestamp:  new Date().toISOString(),
-        version:    '1.0',
-        payload:    { lat, lng },
-      });
+          publishLoc(`driver/${driverId}/location`, {
+            event_id:   `loc_${Date.now()}`,
+            event_type: 'DRIVER_LOCATION',
+            timestamp:  new Date().toISOString(),
+            version:    '1.0',
+            payload:    { lat, lng, driver_id: driverId, trip_id: trip.id },
+          });
 
-      // REST — backend records the position
-      driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
+          driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
     };
 
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => send(coords.latitude, coords.longitude),
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-
-    const watchId = navigator.geolocation.watchPosition(
-      ({ coords }) => send(coords.latitude, coords.longitude),
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
+    // Send immediately, then every 5 seconds
+    publishGps();
+    const timer = setInterval(publishGps, 5000);
+    return () => clearInterval(timer);
   }, [trip.id, trip.status, trip.driver_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset notify badge when trip status changes (new stage)
@@ -1719,7 +1713,10 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           rating: 0,
         },
       }));
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      if (evtLat && evtLng) {
+        setDriverPos({ lat: evtLat, lng: evtLng });
+        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+      }
 
     } else if (event.event_type === 'RIDE_SEARCHING_AGAIN') {
       setTrip(prev => ({ ...prev, status: 'SEARCHING_DRIVER' }));
