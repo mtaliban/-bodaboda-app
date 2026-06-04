@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 
-const ADMIN_API = `${window.location.protocol}//${window.location.hostname}:8003`;
+const ADMIN_API = `${window.location.protocol}//${window.location.host}/admin-api`;
 
 interface Stats {
   total_users: number; riders: number; drivers: number;
@@ -72,8 +72,8 @@ export default function AdminPage() {
   // WebSocket for real-time events
   useEffect(() => {
     if (!token) return;
-    const wsBase = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:8003`;
-    const ws = new WebSocket(`${wsBase}/admin/ws?token=${encodeURIComponent(token)}`);
+    const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${wsProto}://${window.location.host}/admin-api/admin/ws?token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
     ws.onmessage = (e) => {
       try {
