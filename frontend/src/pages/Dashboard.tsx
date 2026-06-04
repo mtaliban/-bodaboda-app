@@ -1894,6 +1894,16 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           <p>{statusDescs[trip.status] ?? trip.message}</p>
         </div>
 
+        {/* Driver live location text — visible MQTT data (Option B) */}
+        {driverPos && ['DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS'].includes(trip.status) && (
+          <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'10px', padding:'0.6rem 0.9rem', fontSize:'0.82rem', display:'flex', flexDirection:'column', gap:'0.2rem' }}>
+            <span style={{ fontWeight:700, color:'#15803d' }}>📡 MQTT — driver/{trip.assigned_driver?.id ?? '?'}/location</span>
+            <span style={{ color:'#166534' }}>Latitude &nbsp;: <strong>{driverPos.lat.toFixed(6)}</strong></span>
+            <span style={{ color:'#166534' }}>Longitude: <strong>{driverPos.lng.toFixed(6)}</strong></span>
+            <span style={{ color:'#6b7280', fontSize:'0.75rem' }}>Imesasishwa: {new Date().toLocaleTimeString()}</span>
+          </div>
+        )}
+
         {/* Approaching banner */}
         {approaching && (
           <div className="tsv-approaching-banner">
