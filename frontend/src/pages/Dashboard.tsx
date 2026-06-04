@@ -1728,7 +1728,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const [driverId, setDriverId]         = useState<number | null>(initialTrip.assigned_driver?.id ?? null);
   const [approaching, setApproaching]   = useState(false);
   const [driverPos, setDriverPos]       = useState<{lat:number;lng:number}|null>(null);
-  const [liveLocPos, setLiveLocPos]     = useState<{lat:number|null;lng:number|null;time:string}|null>(null);
+  const [liveLocPos, setLiveLocPos]     = useState<{lat:number|null;lng:number|null;address?:string;time:string}|null>(null);
   const [chatOpen, setChatOpen]         = useState(false);
   const [chatUnread, setChatUnread]     = useState(0);
   const [declineToast, setDeclineToast] = useState<string | null>(null);
@@ -1751,8 +1751,9 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
       const p = event.payload as Record<string, unknown>;
       const lat = Number(p.lat);
       const lng = Number(p.lng);
+      const address = p.address ? String(p.address) : undefined;
       if (lat && lng) {
-        setLiveLocPos({ lat, lng, time: new Date().toLocaleTimeString() });
+        setLiveLocPos({ lat, lng, address, time: new Date().toLocaleTimeString() });
         setDriverPos({ lat, lng });
       }
     }
@@ -1994,6 +1995,9 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
             <span style={{ color:'#374151' }}>Topic &nbsp;&nbsp;&nbsp;: <code style={{ background:'#dcfce7', padding:'1px 5px', borderRadius:'4px' }}>driver/{driverId}/location</code></span>
             {liveLocPos.lat && liveLocPos.lng ? (
               <>
+                {liveLocPos.address && (
+                  <span style={{ color:'#15803d', fontWeight:600 }}>📍 Eneo: <strong>{liveLocPos.address}</strong></span>
+                )}
                 <span style={{ color:'#166534' }}>Latitude &nbsp;: <strong>{liveLocPos.lat.toFixed(6)}</strong></span>
                 <span style={{ color:'#166534' }}>Longitude: <strong>{liveLocPos.lng.toFixed(6)}</strong></span>
               </>
@@ -2116,16 +2120,28 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 
 // ── Fare Estimate ─────────────────────────────────────────────────────
 
+function calcFareLocally(pickup: MapLocation, dest: MapLocation) {
+  const km = Math.round(haversineKm(pickup.lat, pickup.lng, dest.lat, dest.lng) * 100) / 100;
+  return {
+    distance_km: km,
+    eta_minutes: Math.max(1, Math.round(km / 25 * 60)),
+    fare_tzs: Math.max(1500, Math.round((1000 + 400 * km) / 10) * 10),
+  };
+}
+
 function FareEstimate({ pickup, destination, onReady }: { pickup: MapLocation; destination: MapLocation; onReady?: (ready: boolean) => void }) {
   const [estimate, setEstimate] = useState<{ distance_km: number; eta_minutes: number; fare_tzs: number } | null>(null);
 
   useEffect(() => {
-    setEstimate(null);
-    onReady?.(false);
+    // Calculate immediately on the client for instant feedback
+    const local = calcFareLocally(pickup, destination);
+    setEstimate(local);
+    onReady?.(true);
+    // Also try the API for more accurate server-side calculation
     api.get('/trips/estimate', { params: {
       pickup_lat: pickup.lat, pickup_lng: pickup.lng,
       dest_lat: destination.lat, dest_lng: destination.lng,
-    }}).then(({ data }) => { setEstimate(data); onReady?.(true); }).catch(() => { onReady?.(true); });
+    }}).then(({ data }) => setEstimate(data)).catch(() => {/* keep local */});
   }, [pickup.lat, pickup.lng, destination.lat, destination.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
