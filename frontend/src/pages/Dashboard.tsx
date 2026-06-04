@@ -961,16 +961,37 @@ function DriverHomePanel() {
 
   const { publish: publishStatus } = useMqtt([], useCallback(() => {}, []));
 
-  const lastGpsRef = useRef<{ lat: number; lng: number }>({ lat: -6.168, lng: 35.751 });
+  const lastGpsRef = useRef<{ lat: number; lng: number; address: string }>({ lat: -6.168, lng: 35.751, address: '' });
+
+  // Track driver's real GPS and do reverse geocoding for address
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const geoId = navigator.geolocation.watchPosition(
+      async ({ coords }) => {
+        const lat = coords.latitude, lng = coords.longitude;
+        lastGpsRef.current = { lat, lng, address: lastGpsRef.current.address };
+        try {
+          const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=sw`);
+          const d = await r.json() as { display_name?: string; address?: { road?: string; suburb?: string; city?: string; town?: string; village?: string } };
+          const a = d.address;
+          const name = [a?.road, a?.suburb ?? a?.village ?? a?.town ?? a?.city].filter(Boolean).join(', ');
+          lastGpsRef.current = { lat, lng, address: name || d.display_name?.split(',').slice(0, 2).join(', ') || '' };
+        } catch { /* keep previous address */ }
+      },
+      () => { /* GPS denied — keep default */ },
+      { enableHighAccuracy: true, maximumAge: 8000, timeout: 15000 }
+    );
+    return () => navigator.geolocation.clearWatch(geoId);
+  }, []);
 
   const publishGpsEvent = useCallback((topic: string, eventType: string, extraPayload?: Record<string, unknown>) => {
-    const { lat, lng } = lastGpsRef.current;
+    const { lat, lng, address } = lastGpsRef.current;
     publishStatus(topic, {
       event_id:   `${eventType}_${Date.now()}`,
       event_type: eventType,
       timestamp:  new Date().toISOString(),
       version:    '1.0',
-      payload:    { lat, lng, ...extraPayload },
+      payload:    { lat, lng, address, ...extraPayload },
     });
   }, [publishStatus]);
 

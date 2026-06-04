@@ -17,7 +17,7 @@ def _make_trip_name(pickup: str, dest: str, dt: datetime) -> str:
     day   = _SW_DAYS[dt.weekday()]
     month = _SW_MONTHS[dt.month - 1]
     return f"{shorten(pickup)} → {shorten(dest)} · {day} {dt.day} {month} {dt.year} {dt.strftime('%H:%M')}"
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -394,7 +394,6 @@ class TripService:
         ))
 
         # Auto-deduct fare from rider's wallet
-        from sqlalchemy import update
         from app.models.rider_profile import RiderProfile
         fare = _calc_fare(trip)
         rp_result = await self.db.execute(
