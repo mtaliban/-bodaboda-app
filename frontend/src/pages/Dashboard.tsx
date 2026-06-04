@@ -2525,25 +2525,32 @@ const IconList = () => (
 );
 // ── Wallet Tab ────────────────────────────────────────────────────────
 
+type WalletTx = { id: number; type: string; amount: number; balance_after: number; trip_id?: number; description: string; created_at: string };
+type WalletData = { balance: number; transactions: WalletTx[] };
+
 function WalletTab() {
-  const [data, setData] = useState<{ balance: number; transactions: { id: number; type: string; amount: number; balance_after: number; trip_id?: number; description: string; created_at: string }[] } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData]           = useState<WalletData | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [loadErr, setLoadErr]     = useState('');
   const [topupAmount, setTopupAmount] = useState('');
   const [topupLoading, setTopupLoading] = useState(false);
-  const [topupMsg, setTopupMsg] = useState('');
-  const [topupErr, setTopupErr] = useState('');
+  const [topupMsg, setTopupMsg]   = useState('');
+  const [topupErr, setTopupErr]   = useState('');
   const [showTopup, setShowTopup] = useState(false);
 
   const load = async () => {
-    setLoading(true);
+    setLoading(true); setLoadErr('');
     try {
-      const { data: d } = await api.get('/wallet');
+      const { data: d } = await api.get<WalletData>('/wallet');
       setData(d);
-    } catch {}
-    setLoading(false);
+    } catch (err) {
+      setLoadErr(extractApiError(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const doTopup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2574,6 +2581,7 @@ function WalletTab() {
         </button>
       </div>
 
+      {loadErr && <Alert type="error" message={`Hitilafu ya mkoba: ${loadErr}`} />}
       {topupMsg && <Alert type="success" message={topupMsg} />}
 
       {showTopup && (
@@ -2606,11 +2614,11 @@ function WalletTab() {
         <div style={{ padding: '0.75rem 1rem', fontWeight: 700, fontSize: '0.88rem', borderBottom: '1px solid #f3f4f6' }}>📋 Historia ya Malipo</div>
         {loading ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Inapakia…</div>
-        ) : !data?.transactions.length ? (
+        ) : !data?.transactions?.length ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>Hakuna shughuli bado.</div>
         ) : (
           <div>
-            {data.transactions.map(t => (
+            {(data?.transactions ?? []).map(t => (
               <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: '0.65rem 1rem', borderBottom: '1px solid #f9fafb', gap: '0.75rem' }}>
                 <div style={{ width: 34, height: 34, borderRadius: '50%', background: t.type === 'CREDIT' ? '#f0fdf4' : '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
                   {t.type === 'CREDIT' ? '⬆️' : '⬇️'}
