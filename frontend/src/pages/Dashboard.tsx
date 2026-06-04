@@ -2273,7 +2273,7 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
         destination_lat: destination.lat,
         destination_lng: destination.lng,
         ride_type: 'BODA',
-        payment_method: 'WALLET',
+        payment_method: 'CASH',
       });
       setTrip(data);
     } catch (err) { setError(extractApiError(err)); }
