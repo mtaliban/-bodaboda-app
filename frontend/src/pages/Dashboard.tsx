@@ -8,7 +8,7 @@ import api, { driverApi } from '../api/axios';
 import { useMqtt, type MqttEvent } from '../hooks/useMqtt';
 import Alert from '../components/Alert';
 import RideMap, { type MapLocation } from '../components/RideMap';
-import { User, Trip, DriverOut, Offer, UserNotification, AcceptOfferResponse, DeclineOfferResponse } from '../types';
+import { User, Trip, DriverOut, UserNotification } from '../types';
 
 // ── Helpers ────────────────────────────────────────────────────────────
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -34,7 +34,7 @@ function fmtChatTime(iso: string): string {
 type Tab =
   | 'home' | 'settings' | 'profile' | 'edit-account' | 'edit-profile'
   | 'request-ride' | 'my-trips'
-  | 'current-offer' | 'offer-history'
+  | 'offer-history'
   | 'notifications';
 
 type NavItem = { tab: Tab; label: string; icon: ReactNode; badge?: number };
@@ -67,16 +67,6 @@ function TripStatusBadge({ status }: { status: string }) {
   return <span className={`trip-status-badge ${s.cls}`}>{s.label}</span>;
 }
 
-function OfferStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    OFFERED:  { label: '📨 Pending',  cls: 'ts-searching' },
-    ACCEPTED: { label: '✓ Accepted', cls: 'ts-completed' },
-    DECLINED: { label: '✕ Declined', cls: 'ts-cancelled' },
-    EXPIRED:  { label: '⏰ Expired',  cls: 'ts-nodriver'  },
-  };
-  const s = map[status?.toUpperCase()] ?? { label: status, cls: '' };
-  return <span className={`trip-status-badge ${s.cls}`}>{s.label}</span>;
-}
 
 function extractApiError(err: unknown): string {
   const error = err as AxiosError<{ detail?: unknown; message?: string }>;
@@ -353,7 +343,7 @@ function saveChat(tripId: number, msgs: ChatMsg[]) {
   try { localStorage.setItem(chatKey(tripId), JSON.stringify(msgs)); } catch {}
 }
 
-function TripChat({ tripId, myRole }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; myName: string }) {
+function TripChat({ tripId, myRole, onNewMessage }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; myName: string; onNewMessage?: () => void }) {
   const [messages, setMessages] = useState<ChatMsg[]>(() => loadChat(tripId));
   const [input, setInput] = useState('');
   const [wsState, setWsState] = useState<'connecting' | 'open' | 'closed'>('connecting');
@@ -374,6 +364,7 @@ function TripChat({ tripId, myRole }: { tripId: number; myRole: 'RIDER' | 'DRIVE
         if (d.type === 'message') {
           const msg: ChatMsg = { sender: d.role, senderName: d.name, message: d.text, time: d.time };
           setMessages(prev => { const u = [...prev, msg]; saveChat(tripId, u); return u; });
+          if (d.role !== myRole) onNewMessage?.();
         }
       } catch { /* ignore */ }
     };
@@ -719,6 +710,7 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const [notifying, setNotifying]   = useState(false);
   const [notifySent, setNotifySent] = useState(false);
   const [chatOpen, setChatOpen]     = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
   const prevLocRef = useRef<{ lat: number; lng: number } | null>(null);
   const rtcDriver = useWebRTCCall(trip.id);
 
@@ -726,6 +718,7 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const isActive = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
   const locTopics = isActive && trip.driver_id ? [`driver/${trip.driver_id}/location`] : [];
   const { publish: publishLoc } = useMqtt(locTopics, useCallback(() => {}, []));
+  const { publish: publishStatusEvt } = useMqtt([], useCallback(() => {}, []));
 
   // Publish GPS via MQTT (real-time map on rider side) + REST (backend storage)
   useEffect(() => {
@@ -773,6 +766,26 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
     try {
       await driverApi.post(`/driver/trips/${trip.id}/approaching`);
       setNotifySent(true);
+      navigator.geolocation?.getCurrentPosition(
+        ({ coords }) => {
+          publishStatusEvt(`rides/${trip.id}/status`, {
+            event_id:   `approaching_${Date.now()}`,
+            event_type: 'DRIVER_APPROACHING',
+            timestamp:  new Date().toISOString(),
+            version:    '1.0',
+            payload:    { trip_id: trip.id, driver_id: trip.driver_id, lat: coords.latitude, lng: coords.longitude },
+          });
+          publishLoc(`driver/${trip.driver_id}/location`, {
+            event_id:   `loc_approaching_${Date.now()}`,
+            event_type: 'DRIVER_LOCATION',
+            timestamp:  new Date().toISOString(),
+            version:    '1.0',
+            payload:    { lat: coords.latitude, lng: coords.longitude },
+          });
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 8000 }
+      );
     } catch {}
     setNotifying(false);
   };
@@ -810,9 +823,15 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
       <div className="ctc-chat-row">
         <button
           className={`ctc-chat-toggle${chatOpen ? ' active' : ''}`}
-          onClick={() => setChatOpen(o => !o)}
+          onClick={() => { setChatOpen(o => !o); setChatUnread(0); }}
+          style={{ position: 'relative' }}
         >
           💬 Chat na Abiria {chatOpen ? '▲' : '▼'}
+          {chatUnread > 0 && (
+            <span style={{ position:'absolute', top:'-6px', right:'-6px', background:'#ef4444', color:'#fff', borderRadius:'99px', fontSize:'0.65rem', fontWeight:700, minWidth:'18px', height:'18px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 4px', lineHeight:1 }}>
+              {chatUnread > 9 ? '9+' : chatUnread}
+            </span>
+          )}
         </button>
         <button
           className={`ctc-call-btn${rtcDriver.callState !== 'idle' ? ' ring' : ''}`}
@@ -823,7 +842,7 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
         </button>
       </div>
       <div style={{ display: chatOpen ? undefined : 'none' }}>
-        <TripChat tripId={trip.id} myRole="DRIVER" myName={driverName} />
+        <TripChat tripId={trip.id} myRole="DRIVER" myName={driverName} onNewMessage={() => { if (!chatOpen) setChatUnread(c => c + 1); }} />
       </div>
 
       {/* ── Buttons: exactly what matches the current status ── */}
@@ -868,6 +887,24 @@ function DriverHomePanel() {
   const [msg, setMsg]                     = useState('');
   const [msgType, setMsgType]             = useState<'success' | 'error'>('success');
   const [error, setError]                 = useState('');
+
+  const { publish: publishStatus } = useMqtt([], useCallback(() => {}, []));
+
+  const publishGpsEvent = useCallback((topic: string, eventType: string, extraPayload?: Record<string, unknown>) => {
+    navigator.geolocation?.getCurrentPosition(
+      ({ coords }) => {
+        publishStatus(topic, {
+          event_id:   `${eventType}_${Date.now()}`,
+          event_type: eventType,
+          timestamp:  new Date().toISOString(),
+          version:    '1.0',
+          payload:    { lat: coords.latitude, lng: coords.longitude, ...extraPayload },
+        });
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }, [publishStatus]);
 
   // MQTT — listen for incoming ride requests from Driver Service
   const mqttTopics = driver?.status === 'AVAILABLE'
@@ -933,6 +970,10 @@ function DriverHomePanel() {
       setCurrentTrip(data);
       setIncomingTrip(null);
       setMsg('Umekubali safari! Nenda pickup point.');
+      if (driver) {
+        publishGpsEvent(`rides/${tripId}/status`, 'RIDE_ACCEPTED', { trip_id: tripId, driver_id: driver.id, driver_name: driver.full_name });
+        publishGpsEvent(`driver/${driver.id}/location`, 'DRIVER_LOCATION');
+      }
       setMsgType('success');
       await refreshDriver();
     } catch (err) {
@@ -954,11 +995,14 @@ function DriverHomePanel() {
     try {
       const { data } = await driverApi.post<Trip>(`/driver/trips/${currentTrip.id}/${action}`);
       if (action === 'complete') {
+        publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_COMPLETED', { trip_id: currentTrip.id, driver_id: driver?.id });
         setCurrentTrip(null);
         setMsg('Safari imekamilika! Uko tayari tena.');
         setMsgType('success');
         await refreshDriver();
       } else {
+        publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_STARTED', { trip_id: currentTrip.id, driver_id: driver?.id });
+        if (driver) publishGpsEvent(`driver/${driver.id}/location`, 'DRIVER_LOCATION');
         setCurrentTrip(data);
       }
     } catch (err) {
@@ -1627,6 +1671,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const [approaching, setApproaching] = useState(false);
   const [driverPos, setDriverPos]     = useState<{lat:number;lng:number}|null>(null);
   const [chatOpen, setChatOpen]       = useState(false);
+  const [chatUnread, setChatUnread]   = useState(0);
   const [declineToast, setDeclineToast] = useState<string | null>(null);
   const [retrying, setRetrying]         = useState(false);
   const { user } = useAuth();
@@ -1641,6 +1686,9 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   useMqtt(mqttTopics, useCallback((event: MqttEvent) => {
     const p = event.payload as Record<string, unknown>;
 
+    const evtLat = Number(p.lat || 0);
+    const evtLng = Number(p.lng || 0);
+
     if (event.event_type === 'RIDE_DRIVER_ASSIGNED' || event.event_type === 'RIDE_ACCEPTED') {
       setDriverId(Number(p.driver_id) || null);
       setTrip(prev => ({
@@ -1654,6 +1702,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           rating: 0,
         },
       }));
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
 
     } else if (event.event_type === 'RIDE_SEARCHING_AGAIN') {
       setTrip(prev => ({ ...prev, status: 'SEARCHING_DRIVER' }));
@@ -1665,14 +1714,18 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 
     } else if (event.event_type === 'DRIVER_APPROACHING') {
       setApproaching(true);
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
       setTimeout(() => setApproaching(false), 8000);
     } else if (event.event_type === 'DRIVER_ARRIVED') {
       setApproaching(false);
       setTrip(prev => ({ ...prev, status: 'DRIVER_ARRIVED' }));
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
     } else if (event.event_type === 'RIDE_STARTED') {
       setTrip(prev => ({ ...prev, status: 'IN_PROGRESS' }));
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
     } else if (event.event_type === 'RIDE_COMPLETED') {
       setTrip(prev => ({ ...prev, status: 'COMPLETED' }));
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
     }
   }, []));
 
@@ -1828,7 +1881,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
               <button className="tsv-chat-call" onClick={rtc.call} title="Piga simu">📞</button>
             )}
           </div>
-          <TripChat tripId={trip.id} myRole="RIDER" myName={user?.full_name ?? 'Rider'} />
+          <TripChat tripId={trip.id} myRole="RIDER" myName={user?.full_name ?? 'Rider'} onNewMessage={() => { if (!chatOpen) setChatUnread(c => c + 1); }} />
         </div>
       )}
 
@@ -1880,10 +1933,16 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
               {showChat && (
                 <button
                   className={`tracking-icon-btn tracking-chat-btn${chatOpen ? ' active' : ''}`}
-                  onClick={() => setChatOpen(o => !o)}
+                  onClick={() => { setChatOpen(o => !o); setChatUnread(0); }}
                   title="Chat"
+                  style={{ position: 'relative' }}
                 >
                   💬
+                  {chatUnread > 0 && (
+                    <span style={{ position:'absolute', top:'-4px', right:'-4px', background:'#ef4444', color:'#fff', borderRadius:'99px', fontSize:'0.65rem', fontWeight:700, minWidth:'16px', height:'16px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px', lineHeight:1 }}>
+                      {chatUnread > 9 ? '9+' : chatUnread}
+                    </span>
+                  )}
                 </button>
               )}
             </div>
@@ -2114,15 +2173,10 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
 
               {/* Centre: name + route */}
               <div className="tch-body">
-                <div className="tch-name">{trip.trip_name ?? `Trip #${trip.id}`}</div>
-                <div className="tch-route">
-                  <span className="tch-dot tch-dot-from" />
-                  <span className="tch-addr">{trip.pickup_address}</span>
-                </div>
-                <div className="tch-route-line" />
-                <div className="tch-route">
-                  <span className="tch-dot tch-dot-to" />
-                  <span className="tch-addr">{trip.destination_address}</span>
+                <div className="tch-name">{trip.pickup_address} → {trip.destination_address}</div>
+                <div className="tch-meta-row">
+                  <span>🏍️ {trip.ride_type}</span>
+                  <span>💵 {trip.payment_method}</span>
                 </div>
                 {trip.assigned_driver && (
                   <div className="tch-driver">
@@ -2145,144 +2199,6 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
               </div>
             </div>
           ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Current Offer Tab (DRIVER only) ──────────────────────────────────
-
-function CurrentOfferTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
-  const [offer, setOffer] = useState<Offer | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<'accept' | 'decline' | null>(null);
-  const [msg, setMsg] = useState('');
-  const [msgType, setMsgType] = useState<'success' | 'error'>('success');
-
-  const load = useCallback(async () => {
-    try {
-      const { data } = await api.get<Offer | null>('/drivers/offers/current');
-      setOffer(data ?? null);
-    } catch {}
-    setIsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 5000);
-    return () => clearInterval(interval);
-  }, [load]);
-
-  useMqtt(['rides/new'], useCallback((event: MqttEvent) => {
-    if (event.event_type === 'RIDE_REQUESTED') {
-      setTimeout(load, 500);
-    }
-  }, [load]));
-
-  const accept = async () => {
-    if (!offer) return;
-    setActionLoading('accept');
-    try {
-      const { data } = await api.post<AcceptOfferResponse>(`/drivers/offers/${offer.id}/accept`);
-      setMsg(`${data.message} — ${data.next_action}`);
-      setMsgType('success');
-      setOffer(null);
-    } catch (err) { setMsg(extractApiError(err)); setMsgType('error'); }
-    setActionLoading(null);
-  };
-
-  const decline = async () => {
-    if (!offer) return;
-    setActionLoading('decline');
-    try {
-      const { data } = await api.post<DeclineOfferResponse>(`/drivers/offers/${offer.id}/decline`);
-      setMsg(data.next_action || 'Offer declined.');
-      setMsgType('success');
-      setOffer(null);
-    } catch {}
-    setActionLoading(null);
-  };
-
-  const expiryText = (iso: string) => {
-    const diff = new Date(iso).getTime() - Date.now();
-    if (diff <= 0) return 'Expired';
-    const s = Math.floor(diff / 1000);
-    return s < 60 ? `${s}s left` : `${Math.floor(s / 60)}m left`;
-  };
-
-  return (
-    <div className="tab-page">
-      <div className="tab-page-head">
-        <h1 className="tab-page-title">Current Offer</h1>
-        <button className="btn btn-ghost btn-sm" onClick={load}>↻ Refresh</button>
-      </div>
-
-      {msg && (
-        <div style={{ marginBottom: '1rem' }}>
-          <Alert type={msgType} message={msg} />
-        </div>
-      )}
-
-      {isLoading && <TabLoader />}
-
-      {!isLoading && !offer && !msg && (
-        <EmptyState icon="📨" title="No pending offers" desc="Go online on the Home tab to start receiving ride requests from nearby riders." />
-      )}
-
-      {!isLoading && !offer && msg && (
-        <div className="offer-done-prompt">
-          <button className="btn btn-ghost btn-sm" onClick={() => { setMsg(''); load(); }}>Check for new offers</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setActiveTab('offer-history')}>View Offer History →</button>
-        </div>
-      )}
-
-      {!isLoading && offer && (
-        <div className="offer-card offer-card-featured">
-          <div className="offer-card-head">
-            <div className="offer-card-head-left">
-              <OfferStatusBadge status={offer.status} />
-              <span className="offer-expiry">{expiryText(offer.expires_at)}</span>
-            </div>
-            <span className="trip-card-id">Offer #{offer.id}</span>
-          </div>
-
-          {offer.trip && (
-            <>
-              <div className="trip-route offer-route">
-                <div className="trip-route-item">
-                  <span className="trip-route-dot dot-pickup" />
-                  <div>
-                    <span className="offer-route-label">Pickup</span>
-                    <span className="trip-route-text">{offer.trip.pickup_address}</span>
-                  </div>
-                </div>
-                <div className="trip-route-line" />
-                <div className="trip-route-item">
-                  <span className="trip-route-dot dot-dest" />
-                  <div>
-                    <span className="offer-route-label">Destination</span>
-                    <span className="trip-route-text">{offer.trip.destination_address}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="offer-meta-row">
-                <span>🏍️ {offer.trip.ride_type}</span>
-                <span>💵 {offer.trip.payment_method}</span>
-              </div>
-            </>
-          )}
-
-          {offer.status === 'OFFERED' && (
-            <div className="offer-actions">
-              <button className="btn btn-ghost" onClick={decline} disabled={!!actionLoading}>
-                {actionLoading === 'decline' ? 'Declining…' : '✕ Decline'}
-              </button>
-              <button className="btn btn-primary" onClick={accept} disabled={!!actionLoading}>
-                {actionLoading === 'accept' ? <><span className="btn-spinner" /> Accepting…</> : '✓ Accept Ride'}
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -2338,15 +2254,10 @@ function OfferHistoryTab() {
             <div key={trip.id} className={`trip-card-h tc-s-${trip.status.toLowerCase()}`}>
               <div className="tch-accent" />
               <div className="tch-body">
-                <div className="tch-name">{trip.trip_name ?? `Trip #${trip.id}`}</div>
-                <div className="tch-route">
-                  <span className="tch-dot tch-dot-from" />
-                  <span className="tch-addr">{trip.pickup_address}</span>
-                </div>
-                <div className="tch-route-line" />
-                <div className="tch-route">
-                  <span className="tch-dot tch-dot-to" />
-                  <span className="tch-addr">{trip.destination_address}</span>
+                <div className="tch-name">{trip.pickup_address} → {trip.destination_address}</div>
+                <div className="tch-meta-row">
+                  <span>🏍️ {trip.ride_type}</span>
+                  <span>💵 {trip.payment_method}</span>
                 </div>
               </div>
               <div className="tch-side">
@@ -2658,7 +2569,6 @@ export default function Dashboard() {
           {activeTab === 'edit-profile'  && <EditProfileTab user={user} updateUser={updateUser} setActiveTab={handleTabChange} />}
           {activeTab === 'request-ride'  && isRider  && <RequestRideTab  setActiveTab={handleTabChange} />}
           {activeTab === 'my-trips'      && isRider  && <MyTripsTab      setActiveTab={handleTabChange} />}
-          {activeTab === 'current-offer' && isDriver && <CurrentOfferTab setActiveTab={handleTabChange} />}
           {activeTab === 'offer-history' && isDriver && <OfferHistoryTab />}
           {activeTab === 'notifications' && <NotificationsTab onRead={() => setUnreadCount(0)} />}
         </div>

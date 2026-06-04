@@ -2150,6 +2150,13 @@ button.edit-back {
   color: var(--text-muted);
   white-space: nowrap;
 }
+.tch-meta-row {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin-top: 0.2rem;
+}
 .tch-time-val {
   font-size: 0.7rem;
   color: var(--text-muted);
@@ -3532,8 +3539,8 @@ button.edit-back {
 /* Map area */
 .tracking-map-area {
   position: relative;
-  flex: 0 0 35vh;
-  min-height: 160px;
+  flex: 0 0 30vh;
+  min-height: 140px;
   background: #e5e7eb;
 }
 .tlm-tracking-canvas {
