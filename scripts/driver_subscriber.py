@@ -19,6 +19,14 @@ MQTT_HOST = "localhost"
 MQTT_PORT = 1883
 
 
+def print_gps(payload: dict) -> None:
+    lat = payload.get('lat')
+    lng = payload.get('lng')
+    if lat is not None and lng is not None:
+        print(f"  📍 GPS        : {lat}, {lng}")
+        print(f"  🗺️  Maps link  : https://maps.google.com/?q={lat},{lng}")
+
+
 def print_event(topic: str, event: dict) -> None:
     print("\n" + "═" * 60)
     print(f"  📨  EVENT RECEIVED — {datetime.now().strftime('%H:%M:%S')}")
@@ -52,42 +60,48 @@ def print_event(topic: str, event: dict) -> None:
         print(f"  Dereva     : {payload.get('driver_name')}")
         print(f"  Gari       : {payload.get('vehicle')} ({payload.get('plate')})")
         print(f"  Status     : {payload.get('status')}")
+        print_gps(payload)
 
     elif et == "RIDE_STARTED":
         print(f"  🚀  SAFARI IMEANZA")
-        print(f"  trip_id  : {payload.get('trip_id')}")
-        print(f"  Status   : {payload.get('status')}")
+        print(f"  trip_id    : {payload.get('trip_id')}")
+        print(f"  driver_id  : {payload.get('driver_id')}")
+        print(f"  Status     : {payload.get('status')}")
+        print_gps(payload)
 
     elif et == "RIDE_COMPLETED":
         print(f"  🏁  SAFARI IMEKAMILIKA")
-        print(f"  trip_id  : {payload.get('trip_id')}")
-        print(f"  Status   : {payload.get('status')}")
+        print(f"  trip_id    : {payload.get('trip_id')}")
+        print(f"  driver_id  : {payload.get('driver_id')}")
+        print(f"  Status     : {payload.get('status')}")
+        print_gps(payload)
 
     elif et == "DRIVER_APPROACHING":
         print(f"  📡  DEREVA ANAKARIBIA")
         print(f"  trip_id    : {payload.get('trip_id')}")
         print(f"  Dereva     : {payload.get('driver_name')}")
-        lat = payload.get('lat')
-        lng = payload.get('lng')
-        if lat and lng:
-            print(f"  GPS sasa   : {lat}, {lng}")
+        print_gps(payload)
 
     elif et == "DRIVER_ARRIVED":
         print(f"  📍  DEREVA AMEFIKA")
-        print(f"  trip_id  : {payload.get('trip_id')}")
+        print(f"  trip_id    : {payload.get('trip_id')}")
+        print_gps(payload)
 
     elif et == "DRIVER_LOCATION":
         lat = payload.get('lat')
         lng = payload.get('lng')
         driver_id = payload.get('driver_id')
         trip_id   = payload.get('trip_id')
+        action    = payload.get('action', '')
         print(f"  📍  DRIVER GPS UPDATE")
-        print(f"  driver_id : {driver_id}")
-        print(f"  trip_id   : {trip_id}")
-        print(f"  Latitude  : {lat}")
-        print(f"  Longitude : {lng}")
-        if lat and lng:
-            print(f"  Maps link : https://maps.google.com/?q={lat},{lng}")
+        print(f"  driver_id  : {driver_id}")
+        print(f"  trip_id    : {trip_id}")
+        if action:
+            print(f"  action     : {action}")
+        print(f"  Latitude   : {lat}")
+        print(f"  Longitude  : {lng}")
+        if lat is not None and lng is not None:
+            print(f"  Maps link  : https://maps.google.com/?q={lat},{lng}")
 
     elif et == "RIDE_AVAILABLE":
         print(f"  📢  SAFARI INAPATIKANA (broadcast kwa drivers)")

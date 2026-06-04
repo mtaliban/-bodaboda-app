@@ -720,31 +720,22 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const { publish: publishLoc } = useMqtt(locTopics, useCallback(() => {}, []));
   const { publish: publishStatusEvt } = useMqtt([], useCallback(() => {}, []));
 
-  // Helper — capture real GPS and publish to MQTT on button click
+  // Publish driver GPS immediately on button click (no browser geolocation wait)
   const publishGpsOnAction = useCallback((eventType: string) => {
     const driverId = trip.driver_id;
     if (!driverId) return;
-    const doPublish = (lat: number, lng: number) => {
-      prevLocRef.current = { lat, lng };
-      publishLoc(`driver/${driverId}/location`, {
-        event_id:   `loc_${Date.now()}`,
-        event_type: 'DRIVER_LOCATION',
-        timestamp:  new Date().toISOString(),
-        version:    '1.0',
-        payload:    { lat, lng, driver_id: driverId, trip_id: trip.id, action: eventType },
-      });
-      driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
-    };
-    if (!navigator.geolocation) {
-      doPublish(prevLocRef.current?.lat ?? -6.168, prevLocRef.current?.lng ?? 35.751);
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => doPublish(coords.latitude, coords.longitude),
-      () => doPublish(prevLocRef.current?.lat ?? -6.168, prevLocRef.current?.lng ?? 35.751),
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-  }, [trip.id, trip.driver_id]); // eslint-disable-line react-hooks/exhaustive-deps
+    const lat = prevLocRef.current?.lat ?? (trip.pickup_lat ?? -6.168);
+    const lng = prevLocRef.current?.lng ?? (trip.pickup_lng ?? 35.751);
+    prevLocRef.current = { lat, lng };
+    publishLoc(`driver/${driverId}/location`, {
+      event_id:   `loc_${Date.now()}`,
+      event_type: 'DRIVER_LOCATION',
+      timestamp:  new Date().toISOString(),
+      version:    '1.0',
+      payload:    { lat, lng, driver_id: driverId, trip_id: trip.id, action: eventType },
+    });
+    driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
+  }, [trip.id, trip.driver_id, trip.pickup_lat, trip.pickup_lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset notify badge when trip status changes (new stage)
   useEffect(() => { setNotifySent(false); }, [trip.status]);
@@ -754,31 +745,22 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
     try {
       await driverApi.post(`/driver/trips/${trip.id}/approaching`);
       setNotifySent(true);
-      const doApproaching = (lat: number, lng: number) => {
-        publishStatusEvt(`rides/${trip.id}/status`, {
-          event_id:   `approaching_${Date.now()}`,
-          event_type: 'DRIVER_APPROACHING',
-          timestamp:  new Date().toISOString(),
-          version:    '1.0',
-          payload:    { trip_id: trip.id, driver_id: trip.driver_id, lat, lng },
-        });
-        publishLoc(`driver/${trip.driver_id}/location`, {
-          event_id:   `loc_approaching_${Date.now()}`,
-          event_type: 'DRIVER_LOCATION',
-          timestamp:  new Date().toISOString(),
-          version:    '1.0',
-          payload:    { lat, lng },
-        });
-      };
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          ({ coords }) => doApproaching(coords.latitude, coords.longitude),
-          () => doApproaching(prevLocRef.current?.lat ?? -6.168, prevLocRef.current?.lng ?? 35.751),
-          { enableHighAccuracy: true, timeout: 8000 }
-        );
-      } else {
-        doApproaching(prevLocRef.current?.lat ?? -6.168, prevLocRef.current?.lng ?? 35.751);
-      }
+      const lat = prevLocRef.current?.lat ?? (trip.pickup_lat ?? -6.168);
+      const lng = prevLocRef.current?.lng ?? (trip.pickup_lng ?? 35.751);
+      publishStatusEvt(`rides/${trip.id}/status`, {
+        event_id:   `approaching_${Date.now()}`,
+        event_type: 'DRIVER_APPROACHING',
+        timestamp:  new Date().toISOString(),
+        version:    '1.0',
+        payload:    { trip_id: trip.id, driver_id: trip.driver_id, driver_name: driverName, lat, lng },
+      });
+      publishLoc(`driver/${trip.driver_id}/location`, {
+        event_id:   `loc_approaching_${Date.now()}`,
+        event_type: 'DRIVER_LOCATION',
+        timestamp:  new Date().toISOString(),
+        version:    '1.0',
+        payload:    { lat, lng, driver_id: trip.driver_id, trip_id: trip.id, action: 'DRIVER_APPROACHING' },
+      });
     } catch {}
     setNotifying(false);
   };
@@ -883,25 +865,17 @@ function DriverHomePanel() {
 
   const { publish: publishStatus } = useMqtt([], useCallback(() => {}, []));
 
+  const lastGpsRef = useRef<{ lat: number; lng: number }>({ lat: -6.168, lng: 35.751 });
+
   const publishGpsEvent = useCallback((topic: string, eventType: string, extraPayload?: Record<string, unknown>) => {
-    const doPublish = (lat: number, lng: number) => {
-      publishStatus(topic, {
-        event_id:   `${eventType}_${Date.now()}`,
-        event_type: eventType,
-        timestamp:  new Date().toISOString(),
-        version:    '1.0',
-        payload:    { lat, lng, ...extraPayload },
-      });
-    };
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        ({ coords }) => doPublish(coords.latitude, coords.longitude),
-        () => doPublish(-6.168, 35.751),
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
-    } else {
-      doPublish(-6.168, 35.751);
-    }
+    const { lat, lng } = lastGpsRef.current;
+    publishStatus(topic, {
+      event_id:   `${eventType}_${Date.now()}`,
+      event_type: eventType,
+      timestamp:  new Date().toISOString(),
+      version:    '1.0',
+      payload:    { lat, lng, ...extraPayload },
+    });
   }, [publishStatus]);
 
   // MQTT — listen for incoming ride requests from Driver Service
