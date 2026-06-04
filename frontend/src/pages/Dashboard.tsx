@@ -70,11 +70,20 @@ function TripStatusBadge({ status }: { status: string }) {
 
 
 function extractApiError(err: unknown): string {
-  const error = err as AxiosError<{ detail?: unknown; message?: string }>;
-  const detail = error.response?.data?.detail;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) return detail.map((d: { msg: string }) => d.msg).join(', ');
-  return error.response?.data?.message ?? 'Something went wrong. Please try again.';
+  const error = err as AxiosError<unknown>;
+  if (!error.response) return 'Seva haijibu. Angalia muunganiko wako.';
+  const status = error.response.status;
+  const data = error.response.data;
+  if (typeof data === 'object' && data !== null) {
+    const d = data as { detail?: unknown; message?: string };
+    if (typeof d.detail === 'string') return d.detail;
+    if (Array.isArray(d.detail)) return (d.detail as { msg: string }[]).map(x => x.msg).join(', ');
+    if (typeof d.message === 'string') return d.message;
+  }
+  if (status === 500) return 'Hitilafu ya seva (500). Tafadhali jaribu tena.';
+  if (status === 404) return 'Rasilimali haikupatikana.';
+  if (status === 401 || status === 403) return 'Huna ruhusa.';
+  return `Hitilafu (${status}). Tafadhali jaribu tena.`;
 }
 
 function getGreeting(): string {
@@ -2679,10 +2688,10 @@ function VirtualCardDisplay({ card, userName, onGet, getting }: {
 function WalletTab() {
   const { user } = useAuth();
   const [data, setData]         = useState<WalletData | null>(null);
-  const [card, setCard]         = useState<CardData>(undefined as unknown as CardData);
-  const [cardLoaded, setCardLoaded] = useState(false);
+  const [card, setCard]         = useState<CardData | 'loading'>('loading');
   const [loading, setLoading]   = useState(true);
-  const [loadErr, setLoadErr]   = useState('');
+  const [walletErr, setWalletErr] = useState('');
+  const [cardErr, setCardErr]   = useState('');
   const [amount, setAmount]     = useState('');
   const [saving, setSaving]     = useState(false);
   const [getting, setGetting]   = useState(false);
@@ -2690,12 +2699,12 @@ function WalletTab() {
   const [topupErr, setTopupErr] = useState('');
 
   const loadWallet = async () => {
-    setLoading(true); setLoadErr('');
+    setLoading(true); setWalletErr('');
     try {
       const { data: d } = await api.get<WalletData>('/wallet');
       setData(d);
     } catch (err) {
-      setLoadErr(extractApiError(err));
+      setWalletErr(extractApiError(err));
     } finally {
       setLoading(false);
     }
@@ -2706,9 +2715,8 @@ function WalletTab() {
       const { data: c } = await api.get<CardData>('/wallet/card');
       setCard(c);
     } catch {
+      // endpoint not available or table missing — just hide card section
       setCard(null);
-    } finally {
-      setCardLoaded(true);
     }
   };
 
@@ -2735,12 +2743,12 @@ function WalletTab() {
   };
 
   const getCard = async () => {
-    setGetting(true);
+    setCardErr(''); setGetting(true);
     try {
       const { data: c } = await api.post<CardData>('/wallet/card');
       setCard(c);
     } catch (err) {
-      setLoadErr(extractApiError(err));
+      setCardErr(extractApiError(err));
     } finally {
       setGetting(false);
     }
@@ -2752,19 +2760,7 @@ function WalletTab() {
   return (
     <div style={{ maxWidth: 440, margin: '0 auto', padding: '1rem 0.75rem' }}>
 
-      {/* Virtual Card */}
-      {cardLoaded && (
-        <div style={{ marginBottom: '1rem' }}>
-          <VirtualCardDisplay
-            card={card}
-            userName={user?.full_name ?? ''}
-            onGet={getCard}
-            getting={getting}
-          />
-        </div>
-      )}
-
-      {/* Balance pill */}
+      {/* 1. Balance header — always shown */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(90deg,#FF6B00,#ff9100)', borderRadius: 12, padding: '0.85rem 1.25rem', color: '#fff', marginBottom: '1rem' }}>
         <div>
           <div style={{ fontSize: '0.72rem', opacity: 0.85 }}>Salio la Mkoba</div>
@@ -2775,12 +2771,12 @@ function WalletTab() {
         <span style={{ fontSize: '1.8rem', opacity: 0.4 }}>💰</span>
       </div>
 
-      {loadErr && <Alert type="error" message={loadErr} />}
+      {walletErr && <Alert type="error" message={walletErr} />}
 
-      {/* Top-up form */}
+      {/* 2. Top-up form — always shown, independent of card */}
       <form onSubmit={doTopup} style={{ marginBottom: '1.25rem', padding: '0.85rem', background: '#f9fafb', borderRadius: 12, border: '1px solid #e5e7eb' }}>
         <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.5rem', color: '#374151' }}>
-          💳 Ongeza Pesa {card ? 'kupitia Kadi' : ''}
+          💳 Ongeza Pesa
         </div>
         {msg      && <Alert type="success" message={msg} />}
         {topupErr && <Alert type="error"   message={topupErr} />}
@@ -2807,7 +2803,20 @@ function WalletTab() {
         </div>
       </form>
 
-      {/* Transaction history */}
+      {/* 3. Virtual card — shown when loaded, has its own error */}
+      {card !== 'loading' && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          {cardErr && <Alert type="error" message={cardErr} />}
+          <VirtualCardDisplay
+            card={card}
+            userName={user?.full_name ?? ''}
+            onGet={getCard}
+            getting={getting}
+          />
+        </div>
+      )}
+
+      {/* 4. Transaction history */}
       <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.5rem' }}>Historia ya Malipo</div>
       {loading ? (
         <div style={{ textAlign: 'center', color: '#9ca3af', padding: '1.5rem 0', fontSize: '0.85rem' }}>Inapakia…</div>
