@@ -406,7 +406,7 @@ class TripService:
         ) if rp else None
         rider_user = rider_user_result.scalar_one_or_none() if rider_user_result else None
         if rider_user is not None:
-            old_bal = Decimal(str(getattr(rider_user, 'wallet_balance', 0) or 0))
+            old_bal = Decimal(str(rider_user.wallet_balance or 0))
             new_bal = max(Decimal('0'), old_bal - Decimal(str(fare)))
             await self.db.execute(
                 update(User).where(User.id == rider_user.id).values(wallet_balance=new_bal)

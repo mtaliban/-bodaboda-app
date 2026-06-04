@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
@@ -35,7 +35,7 @@ async def get_wallet(
         .limit(50)
     )
     txns = result.scalars().all()
-    balance = float(getattr(current_user, 'wallet_balance', 0) or 0)
+    balance = float(current_user.wallet_balance or 0)
     return {
         "balance": balance,
         "transactions": [
@@ -67,13 +67,11 @@ async def topup_wallet(
         raise HTTPException(status_code=400, detail="Kiwango cha juu ni TSh 500,000 kwa wakati mmoja")
 
     await db.refresh(current_user)
-    old_bal = Decimal(str(getattr(current_user, 'wallet_balance', 0) or 0))
+    old_bal = Decimal(str(current_user.wallet_balance or 0))
     new_bal = old_bal + Decimal(str(body.amount))
 
-    from sqlalchemy import update
-    from app.models.user import User as UserModel
     await db.execute(
-        update(UserModel).where(UserModel.id == current_user.id).values(wallet_balance=new_bal)
+        update(User).where(User.id == current_user.id).values(wallet_balance=new_bal)
     )
 
     txn = WalletTransaction(
@@ -92,7 +90,6 @@ async def topup_wallet(
 # ── Virtual Card ──────────────────────────────────────────────────────
 
 def _generate_card_number() -> str:
-    """Visa-style: starts with 4, 16 digits, formatted as XXXX XXXX XXXX XXXX."""
     digits = [4] + [random.randint(0, 9) for _ in range(15)]
     return ' '.join(''.join(str(d) for d in digits[i:i+4]) for i in range(0, 16, 4))
 
@@ -128,14 +125,11 @@ async def create_card(
         raise HTTPException(status_code=400, detail="Tayari una kadi ya mkoba")
 
     now = datetime.now(timezone.utc)
-    exp_year = now.year + random.randint(3, 5)
-    exp_month = random.randint(1, 12)
-
     card = VirtualCard(
         user_id=current_user.id,
         card_number=_generate_card_number(),
-        expiry_month=exp_month,
-        expiry_year=exp_year,
+        expiry_month=random.randint(1, 12),
+        expiry_year=now.year + random.randint(3, 5),
         cvv=str(random.randint(100, 999)),
     )
     db.add(card)

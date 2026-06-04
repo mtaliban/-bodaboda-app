@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr
@@ -17,6 +18,7 @@ class UserOut(BaseModel):
     auth_provider: str = "local"
     is_verified: bool = False
     profile_image_url: Optional[str]
+    wallet_balance: Decimal = Decimal("0")
     created_at: datetime
     updated_at: datetime
 

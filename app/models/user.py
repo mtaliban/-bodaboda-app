@@ -1,8 +1,9 @@
 import enum
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional, List
 
-from sqlalchemy import BigInteger, String, Text, Boolean, Enum as SAEnum, TIMESTAMP, func
+from sqlalchemy import BigInteger, String, Text, Boolean, Enum as SAEnum, TIMESTAMP, Numeric, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -40,6 +41,9 @@ class User(Base):
     auth_provider: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     profile_image_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    wallet_balance: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0"), server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
