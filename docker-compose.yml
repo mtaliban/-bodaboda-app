@@ -86,39 +86,16 @@ services:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
         VITE_DRIVER_SERVICE_URL: ${VITE_DRIVER_SERVICE_URL:-}
     image: ${DOCKER_USERNAME}/bodaboda-frontend:latest
-    expose:
-      - "80"
-    depends_on:
-      - auth_service
-    networks:
-      - app_net
-    restart: unless-stopped
-
-  caddy:
-    image: caddy:2-alpine
-    container_name: caddy
     ports:
       - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    environment:
-      CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
     depends_on:
-      - frontend
       - auth_service
-      - driver_service
-      - mosquitto
     networks:
       - app_net
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  caddy_data:
-  caddy_config:
 
 networks:
   app_net:
