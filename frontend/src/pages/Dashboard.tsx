@@ -785,22 +785,43 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const { publish: publishLoc } = useMqtt(locTopics, useCallback(() => {}, []));
   const { publish: publishStatusEvt } = useMqtt([], useCallback(() => {}, []));
 
-  // Publish driver GPS immediately on button click (no browser geolocation wait)
-  const publishGpsOnAction = useCallback((eventType: string) => {
+  // Smart GPS: try real device GPS (1.5s timeout), fall back to trip-based coordinates
+  const getSmartCoords = useCallback((): Promise<{ lat: number; lng: number; address?: string }> => {
+    const pLat = trip.pickup_lat ?? -6.168,  pLng = trip.pickup_lng ?? 35.751;
+    const dLat = trip.destination_lat ?? pLat, dLng = trip.destination_lng ?? pLng;
+    const midLat = (pLat + dLat) / 2 + (Math.random() - 0.5) * 0.002;
+    const midLng = (pLng + dLng) / 2 + (Math.random() - 0.5) * 0.002;
+    const byStatus: Record<string, { lat: number; lng: number; address?: string }> = {
+      DRIVER_ASSIGNED: { lat: pLat + (Math.random()-0.5)*0.003, lng: pLng + (Math.random()-0.5)*0.003, address: trip.pickup_address },
+      IN_PROGRESS:     { lat: midLat, lng: midLng },
+      COMPLETED:       { lat: dLat + (Math.random()-0.5)*0.001, lng: dLng + (Math.random()-0.5)*0.001, address: trip.destination_address },
+    };
+    const fallback = byStatus[trip.status] ?? byStatus.DRIVER_ASSIGNED;
+    if (!navigator.geolocation) return Promise.resolve(fallback);
+    return new Promise(resolve => {
+      const timer = setTimeout(() => resolve(fallback), 1500);
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => { clearTimeout(timer); resolve({ lat: coords.latitude, lng: coords.longitude }); },
+        () => { clearTimeout(timer); resolve(fallback); },
+        { enableHighAccuracy: false, timeout: 1500 }
+      );
+    });
+  }, [trip.status, trip.pickup_lat, trip.pickup_lng, trip.destination_lat, trip.destination_lng, trip.pickup_address, trip.destination_address]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const publishGpsOnAction = useCallback(async (eventType: string) => {
     const driverId = trip.driver_id;
     if (!driverId) return;
-    const lat = prevLocRef.current?.lat ?? (trip.pickup_lat ?? -6.168);
-    const lng = prevLocRef.current?.lng ?? (trip.pickup_lng ?? 35.751);
+    const { lat, lng, address } = await getSmartCoords();
     prevLocRef.current = { lat, lng };
     publishLoc(`driver/${driverId}/location`, {
       event_id:   `loc_${Date.now()}`,
       event_type: 'DRIVER_LOCATION',
       timestamp:  new Date().toISOString(),
       version:    '1.0',
-      payload:    { lat, lng, driver_id: driverId, trip_id: trip.id, action: eventType },
+      payload:    { lat, lng, address, driver_id: driverId, trip_id: trip.id, action: eventType },
     });
     driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
-  }, [trip.id, trip.driver_id, trip.pickup_lat, trip.pickup_lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trip.id, trip.driver_id, getSmartCoords]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset notify badge when trip status changes (new stage)
   useEffect(() => { setNotifySent(false); }, [trip.status]);
@@ -810,21 +831,21 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
     try {
       await driverApi.post(`/driver/trips/${trip.id}/approaching`);
       setNotifySent(true);
-      const lat = prevLocRef.current?.lat ?? (trip.pickup_lat ?? -6.168);
-      const lng = prevLocRef.current?.lng ?? (trip.pickup_lng ?? 35.751);
+      const { lat, lng, address } = await getSmartCoords();
+      prevLocRef.current = { lat, lng };
       publishStatusEvt(`rides/${trip.id}/status`, {
         event_id:   `approaching_${Date.now()}`,
         event_type: 'DRIVER_APPROACHING',
         timestamp:  new Date().toISOString(),
         version:    '1.0',
-        payload:    { trip_id: trip.id, driver_id: trip.driver_id, driver_name: driverName, lat, lng },
+        payload:    { trip_id: trip.id, driver_id: trip.driver_id, driver_name: driverName, lat, lng, address },
       });
       publishLoc(`driver/${trip.driver_id}/location`, {
         event_id:   `loc_approaching_${Date.now()}`,
         event_type: 'DRIVER_LOCATION',
         timestamp:  new Date().toISOString(),
         version:    '1.0',
-        payload:    { lat, lng, driver_id: trip.driver_id, trip_id: trip.id, action: 'DRIVER_APPROACHING' },
+        payload:    { lat, lng, address, driver_id: trip.driver_id, trip_id: trip.id, action: 'DRIVER_APPROACHING' },
       });
     } catch {}
     setNotifying(false);
@@ -2089,15 +2110,17 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 
 // ── Fare Estimate ─────────────────────────────────────────────────────
 
-function FareEstimate({ pickup, destination }: { pickup: MapLocation; destination: MapLocation }) {
+function FareEstimate({ pickup, destination, onReady }: { pickup: MapLocation; destination: MapLocation; onReady?: (ready: boolean) => void }) {
   const [estimate, setEstimate] = useState<{ distance_km: number; eta_minutes: number; fare_tzs: number } | null>(null);
 
   useEffect(() => {
+    setEstimate(null);
+    onReady?.(false);
     api.get('/trips/estimate', { params: {
       pickup_lat: pickup.lat, pickup_lng: pickup.lng,
       dest_lat: destination.lat, dest_lng: destination.lng,
-    }}).then(({ data }) => setEstimate(data)).catch(() => {});
-  }, [pickup.lat, pickup.lng, destination.lat, destination.lng]);
+    }}).then(({ data }) => { setEstimate(data); onReady?.(true); }).catch(() => { onReady?.(true); });
+  }, [pickup.lat, pickup.lng, destination.lat, destination.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="fare-estimate-box">
@@ -2141,6 +2164,7 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
   const [isChecking, setIsChecking]   = useState(true);
   const [error, setError]             = useState('');
   const [trip, setTrip]               = useState<Trip | null>(null);
+  const [estimateReady, setEstimateReady] = useState(false);
 
   // Resume active trip if exists
   useEffect(() => {
@@ -2199,13 +2223,13 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
             />
 
             {pickup && destination && (
-              <FareEstimate pickup={pickup} destination={destination} />
+              <FareEstimate pickup={pickup} destination={destination} onReady={setEstimateReady} />
             )}
 
             <button
               type="submit"
               className="btn btn-primary btn-block"
-              disabled={isLoading || !pickup || !destination}
+              disabled={isLoading || !pickup || !destination || !estimateReady}
               style={{ marginTop: '1rem' }}
             >
               {isLoading ? <><span className="btn-spinner" /> Searching for a driver…</> : '🏍️  Request Ride'}

@@ -93,11 +93,14 @@ def print_event(topic: str, event: dict) -> None:
         driver_id = payload.get('driver_id')
         trip_id   = payload.get('trip_id')
         action    = payload.get('action', '')
+        address   = payload.get('address', '')
         print(f"  📍  DRIVER GPS UPDATE")
         print(f"  driver_id  : {driver_id}")
         print(f"  trip_id    : {trip_id}")
         if action:
             print(f"  action     : {action}")
+        if address:
+            print(f"  Eneo       : {address}")
         print(f"  Latitude   : {lat}")
         print(f"  Longitude  : {lng}")
         if lat is not None and lng is not None:

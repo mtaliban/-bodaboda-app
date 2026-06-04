@@ -20,7 +20,7 @@ def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     return R * 2 * _math.asin(_math.sqrt(a))
 
 
-@router.get("/trips/estimate")
+@router.get("/estimate")
 async def estimate_trip(
     pickup_lat: float,
     pickup_lng: float,
