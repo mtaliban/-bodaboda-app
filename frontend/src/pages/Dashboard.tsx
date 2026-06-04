@@ -786,17 +786,17 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const { publish: publishStatusEvt } = useMqtt([], useCallback(() => {}, []));
 
   // Smart GPS: try real device GPS (1.5s timeout), fall back to trip-based coordinates
-  const getSmartCoords = useCallback((): Promise<{ lat: number; lng: number; address?: string }> => {
+  const getSmartCoords = useCallback((eventType: string): Promise<{ lat: number; lng: number; address?: string }> => {
     const pLat = trip.pickup_lat ?? -6.168,  pLng = trip.pickup_lng ?? 35.751;
     const dLat = trip.destination_lat ?? pLat, dLng = trip.destination_lng ?? pLng;
-    const midLat = (pLat + dLat) / 2 + (Math.random() - 0.5) * 0.002;
-    const midLng = (pLng + dLng) / 2 + (Math.random() - 0.5) * 0.002;
-    const byStatus: Record<string, { lat: number; lng: number; address?: string }> = {
-      DRIVER_ASSIGNED: { lat: pLat + (Math.random()-0.5)*0.003, lng: pLng + (Math.random()-0.5)*0.003, address: trip.pickup_address },
-      IN_PROGRESS:     { lat: midLat, lng: midLng },
-      COMPLETED:       { lat: dLat + (Math.random()-0.5)*0.001, lng: dLng + (Math.random()-0.5)*0.001, address: trip.destination_address },
+    const r = () => (Math.random() - 0.5) * 0.002;
+    const byEvent: Record<string, { lat: number; lng: number; address?: string }> = {
+      RIDE_STARTED:    { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address },
+      RIDE_ACCEPTED:   { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address },
+      DRIVER_APPROACHING: { lat: (pLat+dLat)/2 + r(), lng: (pLng+dLng)/2 + r() },
+      RIDE_COMPLETED:  { lat: dLat + r()/2, lng: dLng + r()/2, address: trip.destination_address },
     };
-    const fallback = byStatus[trip.status] ?? byStatus.DRIVER_ASSIGNED;
+    const fallback = byEvent[eventType] ?? { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address };
     if (!navigator.geolocation) return Promise.resolve(fallback);
     return new Promise(resolve => {
       const timer = setTimeout(() => resolve(fallback), 1500);
@@ -806,12 +806,12 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
         { enableHighAccuracy: false, timeout: 1500 }
       );
     });
-  }, [trip.status, trip.pickup_lat, trip.pickup_lng, trip.destination_lat, trip.destination_lng, trip.pickup_address, trip.destination_address]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trip.pickup_lat, trip.pickup_lng, trip.destination_lat, trip.destination_lng, trip.pickup_address, trip.destination_address]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const publishGpsOnAction = useCallback(async (eventType: string) => {
     const driverId = trip.driver_id;
     if (!driverId) return;
-    const { lat, lng, address } = await getSmartCoords();
+    const { lat, lng, address } = await getSmartCoords(eventType);
     prevLocRef.current = { lat, lng };
     publishLoc(`driver/${driverId}/location`, {
       event_id:   `loc_${Date.now()}`,
@@ -831,7 +831,7 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
     try {
       await driverApi.post(`/driver/trips/${trip.id}/approaching`);
       setNotifySent(true);
-      const { lat, lng, address } = await getSmartCoords();
+      const { lat, lng, address } = await getSmartCoords('DRIVER_APPROACHING');
       prevLocRef.current = { lat, lng };
       publishStatusEvt(`rides/${trip.id}/status`, {
         event_id:   `approaching_${Date.now()}`,
@@ -1743,7 +1743,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
     : [];
 
   // Direct subscription to driver location topic — independent of map
-  const locTopics = driverId && ACTIVE_TRIP_STATUSES.includes(trip.status)
+  const locTopics = driverId && [...ACTIVE_TRIP_STATUSES, 'COMPLETED'].includes(trip.status)
     ? [`driver/${driverId}/location`]
     : [];
   useMqtt(locTopics, useCallback((event: MqttEvent) => {
@@ -1777,13 +1777,13 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           rating: 0,
         },
       }));
-      // Show card immediately — with GPS if available, else waiting state
-      setLiveLocPos({
-        lat: evtLat || null,
-        lng: evtLng || null,
-        time: new Date().toLocaleTimeString(),
-      });
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      // Show waiting card immediately; update with real GPS only when event has coordinates
+      if (evtLat && evtLng) {
+        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setDriverPos({ lat: evtLat, lng: evtLng });
+      } else {
+        setLiveLocPos(prev => prev ?? { lat: null, lng: null, time: new Date().toLocaleTimeString() });
+      }
 
     } else if (event.event_type === 'RIDE_SEARCHING_AGAIN') {
       setTrip(prev => ({ ...prev, status: 'SEARCHING_DRIVER' }));
@@ -1795,24 +1795,30 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
 
     } else if (event.event_type === 'DRIVER_APPROACHING') {
       setApproaching(true);
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      if (evtLat && evtLng) {
+        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setDriverPos({ lat: evtLat, lng: evtLng });
+      }
       setTimeout(() => setApproaching(false), 8000);
     } else if (event.event_type === 'DRIVER_ARRIVED') {
       setApproaching(false);
       setTrip(prev => ({ ...prev, status: 'DRIVER_ARRIVED' }));
-      setLiveLocPos({ lat: evtLat || null, lng: evtLng || null, time: new Date().toLocaleTimeString() });
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      if (evtLat && evtLng) {
+        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setDriverPos({ lat: evtLat, lng: evtLng });
+      }
     } else if (event.event_type === 'RIDE_STARTED') {
       setTrip(prev => ({ ...prev, status: 'IN_PROGRESS' }));
-      setLiveLocPos({ lat: evtLat || null, lng: evtLng || null, time: new Date().toLocaleTimeString() });
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      if (evtLat && evtLng) {
+        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setDriverPos({ lat: evtLat, lng: evtLng });
+      }
     } else if (event.event_type === 'RIDE_COMPLETED') {
       setTrip(prev => ({ ...prev, status: 'COMPLETED' }));
-      setLiveLocPos({ lat: evtLat || null, lng: evtLng || null, time: new Date().toLocaleTimeString() });
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
-    } else if (event.event_type === 'DRIVER_APPROACHING') {
-      setLiveLocPos({ lat: evtLat || null, lng: evtLng || null, time: new Date().toLocaleTimeString() });
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      if (evtLat && evtLng) {
+        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setDriverPos({ lat: evtLat, lng: evtLng });
+      }
     }
   }, [])); // eslint-disable-line react-hooks/exhaustive-deps
 
