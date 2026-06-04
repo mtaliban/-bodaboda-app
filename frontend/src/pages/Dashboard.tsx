@@ -720,37 +720,27 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const { publish: publishLoc } = useMqtt(locTopics, useCallback(() => {}, []));
   const { publish: publishStatusEvt } = useMqtt([], useCallback(() => {}, []));
 
-  // Publish GPS via MQTT every 5 seconds — rider sees real location as text
-  useEffect(() => {
+  // Helper — capture real GPS and publish to MQTT on button click
+  const publishGpsOnAction = useCallback((eventType: string) => {
     const driverId = trip.driver_id;
-    if (!isActive || !navigator.geolocation || !driverId) return;
-
-    const publishGps = () => {
-      navigator.geolocation.getCurrentPosition(
-        ({ coords }) => {
-          const { latitude: lat, longitude: lng } = coords;
-          prevLocRef.current = { lat, lng };
-
-          publishLoc(`driver/${driverId}/location`, {
-            event_id:   `loc_${Date.now()}`,
-            event_type: 'DRIVER_LOCATION',
-            timestamp:  new Date().toISOString(),
-            version:    '1.0',
-            payload:    { lat, lng, driver_id: driverId, trip_id: trip.id },
-          });
-
-          driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 8000 }
-      );
-    };
-
-    // Send immediately, then every 5 seconds
-    publishGps();
-    const timer = setInterval(publishGps, 5000);
-    return () => clearInterval(timer);
-  }, [trip.id, trip.status, trip.driver_id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!driverId || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        const { latitude: lat, longitude: lng } = coords;
+        prevLocRef.current = { lat, lng };
+        publishLoc(`driver/${driverId}/location`, {
+          event_id:   `loc_${Date.now()}`,
+          event_type: 'DRIVER_LOCATION',
+          timestamp:  new Date().toISOString(),
+          version:    '1.0',
+          payload:    { lat, lng, driver_id: driverId, trip_id: trip.id, action: eventType },
+        });
+        driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }, [trip.id, trip.driver_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset notify badge when trip status changes (new stage)
   useEffect(() => { setNotifySent(false); }, [trip.status]);
@@ -844,21 +834,21 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
 
         {/* STEP 2 of 4: Anza Safari */}
         {(trip.status === 'DRIVER_ASSIGNED' || trip.status === 'DRIVER_ARRIVED') && (
-          <button className="btn btn-primary btn-block" onClick={() => onAction('start')} disabled={!!actionLoading}>
+          <button className="btn btn-primary btn-block" onClick={() => { publishGpsOnAction('RIDE_STARTED'); onAction('start'); }} disabled={!!actionLoading}>
             {actionLoading === 'start' ? <><span className="btn-spinner" /> Inaanza…</> : '🚀 Anza Safari'}
           </button>
         )}
 
         {/* STEP 3 of 4: Nakaribia (notify rider) */}
         {trip.status === 'IN_PROGRESS' && (
-          <button className="btn btn-ghost btn-block" onClick={sendNakaribia} disabled={notifying || notifySent}>
+          <button className="btn btn-ghost btn-block" onClick={() => { publishGpsOnAction('DRIVER_APPROACHING'); sendNakaribia(); }} disabled={notifying || notifySent}>
             {notifying ? <><span className="btn-spinner" /> Inatuma…</> : notifySent ? '✓ Rider amejulishwa' : '📡 Nakaribia'}
           </button>
         )}
 
         {/* STEP 4 of 4: Nimemaliza */}
         {trip.status === 'IN_PROGRESS' && (
-          <button className="btn btn-navy btn-block" onClick={() => onAction('complete')} disabled={!!actionLoading}>
+          <button className="btn btn-navy btn-block" onClick={() => { publishGpsOnAction('RIDE_COMPLETED'); onAction('complete'); }} disabled={!!actionLoading}>
             {actionLoading === 'complete' ? <><span className="btn-spinner" /> Inakamilisha…</> : '✓ Nimemaliza'}
           </button>
         )}
@@ -1733,15 +1723,17 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
     } else if (event.event_type === 'DRIVER_ARRIVED') {
       setApproaching(false);
       setTrip(prev => ({ ...prev, status: 'DRIVER_ARRIVED' }));
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      if (evtLat && evtLng) { setDriverPos({ lat: evtLat, lng: evtLng }); setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() }); }
     } else if (event.event_type === 'RIDE_STARTED') {
       setTrip(prev => ({ ...prev, status: 'IN_PROGRESS' }));
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      if (evtLat && evtLng) { setDriverPos({ lat: evtLat, lng: evtLng }); setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() }); }
     } else if (event.event_type === 'RIDE_COMPLETED') {
       setTrip(prev => ({ ...prev, status: 'COMPLETED' }));
-      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
+      if (evtLat && evtLng) { setDriverPos({ lat: evtLat, lng: evtLng }); setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() }); }
+    } else if (event.event_type === 'DRIVER_APPROACHING') {
+      if (evtLat && evtLng) { setDriverPos({ lat: evtLat, lng: evtLng }); setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() }); }
     }
-  }, []));
+  }, [])); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Polling fallback (30s)
   useEffect(() => {
@@ -1908,13 +1900,14 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           <p>{statusDescs[trip.status] ?? trip.message}</p>
         </div>
 
-        {/* Driver live location text — Option B live MQTT data */}
-        {liveLocPos && ['DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS'].includes(trip.status) && (
-          <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'10px', padding:'0.6rem 0.9rem', fontSize:'0.82rem', display:'flex', flexDirection:'column', gap:'0.2rem' }}>
-            <span style={{ fontWeight:700, color:'#15803d' }}>📡 MQTT Live — driver/{driverId}/location</span>
-            <span style={{ color:'#166534' }}>Latitude &nbsp;: <strong>{liveLocPos.lat.toFixed(6)}</strong></span>
+        {/* Driver live location text — Option B: GPS published on every driver action */}
+        {liveLocPos && (
+          <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'10px', padding:'0.6rem 0.9rem', fontSize:'0.82rem', display:'flex', flexDirection:'column', gap:'0.25rem' }}>
+            <span style={{ fontWeight:700, color:'#15803d' }}>📡 Dereva — GPS Halisi (MQTT)</span>
+            <span style={{ color:'#166534' }}>Topic &nbsp;&nbsp;&nbsp;: <strong>driver/{driverId}/location</strong></span>
+            <span style={{ color:'#166534' }}>Latitude : <strong>{liveLocPos.lat.toFixed(6)}</strong></span>
             <span style={{ color:'#166534' }}>Longitude: <strong>{liveLocPos.lng.toFixed(6)}</strong></span>
-            <span style={{ color:'#6b7280', fontSize:'0.75rem' }}>Imesasishwa: {liveLocPos.time}</span>
+            <span style={{ color:'#6b7280', fontSize:'0.75rem' }}>Ilitumwa: {liveLocPos.time}</span>
           </div>
         )}
 
