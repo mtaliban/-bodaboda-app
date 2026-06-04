@@ -2145,20 +2145,28 @@ function calcFareLocally(pickup: MapLocation, dest: MapLocation) {
   };
 }
 
-function FareEstimate({ pickup, destination, onReady }: { pickup: MapLocation; destination: MapLocation; onReady?: (ready: boolean) => void }) {
+function FareEstimate({ pickup, destination, onReady, walletBalance }: {
+  pickup: MapLocation;
+  destination: MapLocation;
+  onReady?: (ready: boolean, fare: number) => void;
+  walletBalance?: number | null;
+}) {
   const [estimate, setEstimate] = useState<{ distance_km: number; eta_minutes: number; fare_tzs: number } | null>(null);
 
   useEffect(() => {
-    // Calculate immediately on the client for instant feedback
     const local = calcFareLocally(pickup, destination);
     setEstimate(local);
-    onReady?.(true);
-    // Also try the API for more accurate server-side calculation
+    onReady?.(true, local.fare_tzs);
     api.get('/trips/estimate', { params: {
       pickup_lat: pickup.lat, pickup_lng: pickup.lng,
       dest_lat: destination.lat, dest_lng: destination.lng,
-    }}).then(({ data }) => setEstimate(data)).catch(() => {/* keep local */});
+    }}).then(({ data }) => {
+      setEstimate(data);
+      onReady?.(true, data.fare_tzs);
+    }).catch(() => {/* keep local */});
   }, [pickup.lat, pickup.lng, destination.lat, destination.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const insufficient = walletBalance !== null && walletBalance !== undefined && estimate !== null && walletBalance < estimate.fare_tzs;
 
   return (
     <div className="fare-estimate-box">
@@ -2185,6 +2193,19 @@ function FareEstimate({ pickup, destination, onReady }: { pickup: MapLocation; d
             <span className="fare-label">💵 Bei ya Safari</span>
             <span className="fare-price">TSh {estimate.fare_tzs.toLocaleString()}</span>
           </div>
+          {walletBalance !== null && walletBalance !== undefined && (
+            <div className="fare-row" style={{ marginTop: '0.25rem' }}>
+              <span className="fare-label">💰 Salio Lako</span>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem', color: insufficient ? '#dc2626' : '#16a34a' }}>
+                TSh {walletBalance.toLocaleString()}
+              </span>
+            </div>
+          )}
+          {insufficient && (
+            <div style={{ marginTop: '0.5rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '0.5rem 0.75rem', fontSize: '0.8rem', color: '#dc2626', fontWeight: 600 }}>
+              ⚠️ Salio haitoshi. Unahitaji TSh {(estimate.fare_tzs - walletBalance!).toLocaleString()} zaidi. Nenda Wallet uongeze pesa.
+            </div>
+          )}
         </>
       ) : (
         <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: '0.8rem', padding: '0.5rem' }}>Inakokotoa bei…</div>
@@ -2196,16 +2217,18 @@ function FareEstimate({ pickup, destination, onReady }: { pickup: MapLocation; d
 // ── Request Ride Tab (RIDER only) ─────────────────────────────────────
 
 function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
-  const [pickup, setPickup]           = useState<MapLocation | null>(null);
-  const [destination, setDestination] = useState<MapLocation | null>(null);
-  const [isLoading, setIsLoading]     = useState(false);
-  const [isChecking, setIsChecking]   = useState(true);
-  const [error, setError]             = useState('');
-  const [trip, setTrip]               = useState<Trip | null>(null);
+  const [pickup, setPickup]               = useState<MapLocation | null>(null);
+  const [destination, setDestination]     = useState<MapLocation | null>(null);
+  const [isLoading, setIsLoading]         = useState(false);
+  const [isChecking, setIsChecking]       = useState(true);
+  const [error, setError]                 = useState('');
+  const [trip, setTrip]                   = useState<Trip | null>(null);
   const [estimateReady, setEstimateReady] = useState(false);
+  const [estimatedFare, setEstimatedFare] = useState(0);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
-  // Resume active trip if exists
   useEffect(() => {
+    // Load active trip + wallet balance in parallel
     api.get<Trip[]>('/trips/my')
       .then(({ data }) => {
         const active = data.find(t => ACTIVE_TRIP_STATUSES.includes(t.status));
@@ -2213,12 +2236,24 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
       })
       .catch(() => {})
       .finally(() => setIsChecking(false));
+
+    api.get<{ balance: number }>('/wallet')
+      .then(({ data }) => setWalletBalance(data.balance))
+      .catch(() => {});
   }, []);
+
+  const handleFareReady = (ready: boolean, fare: number) => {
+    setEstimateReady(ready);
+    setEstimatedFare(fare);
+  };
+
+  const balanceInsufficient = walletBalance !== null && estimatedFare > 0 && walletBalance < estimatedFare;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pickup) { setError('Please set your pickup location.'); return; }
-    if (!destination) { setError('Please set your destination.'); return; }
+    if (!pickup) { setError('Weka mahali pa kuanza safari.'); return; }
+    if (!destination) { setError('Weka mahali pa kwenda.'); return; }
+    if (balanceInsufficient) { setError('Salio haitoshi. Ongeza pesa kwenye Wallet kwanza.'); return; }
     setIsLoading(true); setError('');
     try {
       const { data } = await api.post<Trip>('/trips/request', {
@@ -2229,7 +2264,7 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
         destination_lat: destination.lat,
         destination_lng: destination.lng,
         ride_type: 'BODA',
-        payment_method: 'CASH',
+        payment_method: 'WALLET',
       });
       setTrip(data);
     } catch (err) { setError(extractApiError(err)); }
@@ -2247,8 +2282,8 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
       <div className="edit-card" style={{ maxWidth: '680px' }}>
         <div className="edit-card-head">
           <button className="edit-back" onClick={() => setActiveTab('home')}>← Back to Home</button>
-          <h1 className="edit-title">Request a Ride</h1>
-          <p className="edit-sub">Choose your pickup and destination on the map.</p>
+          <h1 className="edit-title">Omba Safari</h1>
+          <p className="edit-sub">Chagua mahali pa kuanzia na kwenda kwenye ramani.</p>
         </div>
         <div className="edit-card-body">
           {error && <Alert type="error" message={error} />}
@@ -2261,17 +2296,37 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
             />
 
             {pickup && destination && (
-              <FareEstimate pickup={pickup} destination={destination} onReady={setEstimateReady} />
+              <FareEstimate
+                pickup={pickup}
+                destination={destination}
+                onReady={handleFareReady}
+                walletBalance={walletBalance}
+              />
             )}
 
             <button
               type="submit"
               className="btn btn-primary btn-block"
-              disabled={isLoading || !pickup || !destination || !estimateReady}
-              style={{ marginTop: '1rem' }}
+              disabled={isLoading || !pickup || !destination || !estimateReady || balanceInsufficient}
+              style={{ marginTop: '1rem', opacity: balanceInsufficient ? 0.5 : 1 }}
             >
-              {isLoading ? <><span className="btn-spinner" /> Searching for a driver…</> : '🏍️  Request Ride'}
+              {isLoading
+                ? <><span className="btn-spinner" /> Inatafuta dereva…</>
+                : balanceInsufficient
+                  ? '🔒 Salio Haitoshi — Ongeza Pesa'
+                  : '🏍️  Omba Safari'}
             </button>
+
+            {balanceInsufficient && (
+              <button
+                type="button"
+                className="btn btn-outline btn-block"
+                style={{ marginTop: '0.5rem' }}
+                onClick={() => setActiveTab('wallet')}
+              >
+                💰 Nenda Wallet Uongeze Pesa
+              </button>
+            )}
           </form>
         </div>
       </div>
@@ -2541,19 +2596,100 @@ const IconList = () => (
 
 type WalletTx = { id: number; type: string; amount: number; balance_after: number; trip_id?: number; description: string; created_at: string };
 type WalletData = { balance: number; transactions: WalletTx[] };
+type CardData = { card_number: string; expiry_month: number; expiry_year: number; cvv: string } | null;
 
 const QUICK_AMOUNTS = [1000, 5000, 10000, 20000];
 
-function WalletTab() {
-  const [data, setData]               = useState<WalletData | null>(null);
-  const [loading, setLoading]         = useState(true);
-  const [loadErr, setLoadErr]         = useState('');
-  const [amount, setAmount]           = useState('');
-  const [saving, setSaving]           = useState(false);
-  const [msg, setMsg]                 = useState('');
-  const [topupErr, setTopupErr]       = useState('');
+// Visual credit card component
+function VirtualCardDisplay({ card, userName, onGet, getting }: {
+  card: CardData;
+  userName: string;
+  onGet: () => void;
+  getting: boolean;
+}) {
+  const [showCvv, setShowCvv] = useState(false);
 
-  const load = async () => {
+  if (!card) {
+    return (
+      <div style={{
+        background: 'linear-gradient(135deg,#1e293b,#334155)',
+        borderRadius: 16, padding: '1.5rem', color: '#fff',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', gap: '0.75rem', minHeight: 160,
+      }}>
+        <div style={{ fontSize: '2rem' }}>💳</div>
+        <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>Huna kadi bado</div>
+        <button
+          onClick={onGet} disabled={getting}
+          style={{ background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 99, padding: '0.5rem 1.5rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem' }}>
+          {getting ? 'Inatengeneza…' : '+ Pata Kadi Yako'}
+        </button>
+      </div>
+    );
+  }
+
+  // Display: first 12 digits masked, last 4 visible
+  const parts = card.card_number.split(' ');
+  const maskedNum = parts.map((p, i) => i < 3 ? '••••' : p).join('  ');
+  const expiry = `${String(card.expiry_month).padStart(2,'0')}/${String(card.expiry_year).slice(-2)}`;
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg,#1e3a8a,#1d4ed8,#0f172a)',
+      borderRadius: 16, padding: '1.25rem 1.5rem', color: '#fff',
+      fontFamily: '"Courier New", monospace', position: 'relative',
+      minHeight: 160, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+      boxShadow: '0 8px 32px rgba(30,58,138,0.35)',
+    }}>
+      {/* Top row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ fontSize: '0.72rem', letterSpacing: '0.15em', opacity: 0.7, fontFamily: 'inherit' }}>BODABODA WALLET</div>
+        <div style={{ fontSize: '1.4rem' }}>💳</div>
+      </div>
+
+      {/* Card number */}
+      <div style={{ fontSize: '1.05rem', letterSpacing: '0.2em', textAlign: 'center', margin: '0.75rem 0' }}>
+        {maskedNum}
+      </div>
+
+      {/* Bottom row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div>
+          <div style={{ fontSize: '0.6rem', opacity: 0.6, marginBottom: 2 }}>VALID THRU</div>
+          <div style={{ fontSize: '0.85rem', letterSpacing: '0.1em' }}>{expiry}</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '0.6rem', opacity: 0.6, marginBottom: 2 }}>CVV</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <div style={{ fontSize: '0.85rem', letterSpacing: '0.1em' }}>{showCvv ? card.cvv : '•••'}</div>
+            <button onClick={() => setShowCvv(s => !s)} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', fontSize: '0.65rem', padding: '1px 5px' }}>
+              {showCvv ? '🙈' : '👁'}
+            </button>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '0.6rem', opacity: 0.6, marginBottom: 2 }}>MTUMIAJI</div>
+          <div style={{ fontSize: '0.78rem', textTransform: 'uppercase', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WalletTab() {
+  const { user } = useAuth();
+  const [data, setData]         = useState<WalletData | null>(null);
+  const [card, setCard]         = useState<CardData>(undefined as unknown as CardData);
+  const [cardLoaded, setCardLoaded] = useState(false);
+  const [loading, setLoading]   = useState(true);
+  const [loadErr, setLoadErr]   = useState('');
+  const [amount, setAmount]     = useState('');
+  const [saving, setSaving]     = useState(false);
+  const [getting, setGetting]   = useState(false);
+  const [msg, setMsg]           = useState('');
+  const [topupErr, setTopupErr] = useState('');
+
+  const loadWallet = async () => {
     setLoading(true); setLoadErr('');
     try {
       const { data: d } = await api.get<WalletData>('/wallet');
@@ -2565,7 +2701,21 @@ function WalletTab() {
     }
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadCard = async () => {
+    try {
+      const { data: c } = await api.get<CardData>('/wallet/card');
+      setCard(c);
+    } catch {
+      setCard(null);
+    } finally {
+      setCardLoaded(true);
+    }
+  };
+
+  useEffect(() => {
+    loadWallet();
+    loadCard();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const doTopup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2576,11 +2726,23 @@ function WalletTab() {
       const { data: d } = await api.post<{ balance: number; message: string }>('/wallet/topup', { amount: val });
       setMsg(d.message ?? 'Pesa zimeongezwa!');
       setAmount('');
-      await load();
+      await loadWallet();
     } catch (err) {
       setTopupErr(extractApiError(err));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const getCard = async () => {
+    setGetting(true);
+    try {
+      const { data: c } = await api.post<CardData>('/wallet/card');
+      setCard(c);
+    } catch (err) {
+      setLoadErr(extractApiError(err));
+    } finally {
+      setGetting(false);
     }
   };
 
@@ -2590,26 +2752,43 @@ function WalletTab() {
   return (
     <div style={{ maxWidth: 440, margin: '0 auto', padding: '1rem 0.75rem' }}>
 
-      {/* Balance */}
-      <div style={{ background: 'linear-gradient(135deg,#FF6B00,#ff9100)', borderRadius: 14, padding: '1.25rem 1.5rem', color: '#fff', marginBottom: '1rem' }}>
-        <div style={{ fontSize: '0.78rem', opacity: 0.85 }}>Salio la Mkoba</div>
-        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.2rem 0 0' }}>
-          {loading ? '…' : `TSh ${balance.toLocaleString()}`}
+      {/* Virtual Card */}
+      {cardLoaded && (
+        <div style={{ marginBottom: '1rem' }}>
+          <VirtualCardDisplay
+            card={card}
+            userName={user?.full_name ?? ''}
+            onGet={getCard}
+            getting={getting}
+          />
         </div>
+      )}
+
+      {/* Balance pill */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(90deg,#FF6B00,#ff9100)', borderRadius: 12, padding: '0.85rem 1.25rem', color: '#fff', marginBottom: '1rem' }}>
+        <div>
+          <div style={{ fontSize: '0.72rem', opacity: 0.85 }}>Salio la Mkoba</div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 800 }}>
+            {loading ? '…' : `TSh ${balance.toLocaleString()}`}
+          </div>
+        </div>
+        <span style={{ fontSize: '1.8rem', opacity: 0.4 }}>💰</span>
       </div>
 
       {loadErr && <Alert type="error" message={loadErr} />}
 
-      {/* Add money form */}
-      <form onSubmit={doTopup} style={{ marginBottom: '1.25rem' }}>
-        <div style={{ fontWeight: 700, fontSize: '0.88rem', marginBottom: '0.5rem', color: '#374151' }}>Ongeza Pesa</div>
-        {msg       && <Alert type="success" message={msg} />}
-        {topupErr  && <Alert type="error"   message={topupErr} />}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '0.4rem', marginBottom: '0.5rem' }}>
+      {/* Top-up form */}
+      <form onSubmit={doTopup} style={{ marginBottom: '1.25rem', padding: '0.85rem', background: '#f9fafb', borderRadius: 12, border: '1px solid #e5e7eb' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.5rem', color: '#374151' }}>
+          💳 Ongeza Pesa {card ? 'kupitia Kadi' : ''}
+        </div>
+        {msg      && <Alert type="success" message={msg} />}
+        {topupErr && <Alert type="error"   message={topupErr} />}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '0.35rem', marginBottom: '0.5rem' }}>
           {QUICK_AMOUNTS.map(a => (
             <button key={a} type="button"
               onClick={() => setAmount(String(a))}
-              style={{ padding: '0.45rem 0', background: amount === String(a) ? '#FF6B00' : '#f3f4f6', color: amount === String(a) ? '#fff' : '#374151', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>
+              style={{ padding: '0.45rem 0', background: amount === String(a) ? '#FF6B00' : '#fff', color: amount === String(a) ? '#fff' : '#374151', border: `1px solid ${amount === String(a) ? '#FF6B00' : '#e5e7eb'}`, borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>
               {a >= 1000 ? `${a/1000}k` : a}
             </button>
           ))}
@@ -2620,7 +2799,7 @@ function WalletTab() {
             placeholder="Kiasi (TSh)"
             value={amount}
             onChange={e => setAmount(e.target.value)}
-            style={{ flex: 1, padding: '0.6rem 0.75rem', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: '0.88rem' }}
+            style={{ flex: 1, padding: '0.6rem 0.75rem', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: '0.88rem', background: '#fff' }}
           />
           <button type="submit" disabled={saving} className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
             {saving ? <><span className="btn-spinner" /> Inaongeza…</> : '+ Weka'}

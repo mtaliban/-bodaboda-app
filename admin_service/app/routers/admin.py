@@ -223,6 +223,36 @@ async def get_events_history(limit: int = 200, db: AsyncSession = Depends(get_db
     return [dict(r) for r in result.mappings()]
 
 
+# ── Wallet Transactions (all users) ──────────────────────────────────────────
+@router.get("/wallet/transactions", dependencies=[Depends(verify_admin_token)])
+async def get_wallet_transactions(limit: int = 200, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT wt.id, wt.user_id, wt.type, wt.amount::float AS amount,
+               wt.balance_after::float AS balance_after,
+               wt.trip_id, wt.description, wt.created_at,
+               u.full_name AS user_name, u.phone AS user_phone, u.role AS user_role
+        FROM wallet_transactions wt
+        JOIN users u ON u.id = wt.user_id
+        ORDER BY wt.created_at DESC
+        LIMIT :limit
+    """), {"limit": limit})
+    return [dict(r) for r in result.mappings()]
+
+
+# ── Virtual Cards (all users) ─────────────────────────────────────────────────
+@router.get("/wallet/cards", dependencies=[Depends(verify_admin_token)])
+async def get_virtual_cards(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT vc.id, vc.user_id, vc.card_number,
+               vc.expiry_month, vc.expiry_year, vc.created_at,
+               u.full_name AS user_name, u.phone AS user_phone, u.role AS user_role
+        FROM virtual_cards vc
+        JOIN users u ON u.id = vc.user_id
+        ORDER BY vc.created_at DESC
+    """))
+    return [dict(r) for r in result.mappings()]
+
+
 # ── WebSocket — real-time event feed ─────────────────────────────────────────
 @router.websocket("/ws")
 async def admin_ws(websocket: WebSocket):

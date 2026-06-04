@@ -125,10 +125,13 @@ export default function AdminPage() {
   const [users,   setUsers]    = useState<AdminUser[]>([]);
   const [trips,   setTrips]    = useState<AdminTrip[]>([]);
   const [drivers, setDrivers]  = useState<AdminDriver[]>([]);
-  const [tab, setTab] = useState<'stats'|'users'|'trips'|'drivers'|'events'|'profile'>('stats');
+  const [tab, setTab] = useState<'stats'|'users'|'trips'|'drivers'|'events'|'wallet'|'profile'>('stats');
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const [histEvents, setHistEvents] = useState<HistEvent[]>([]);
   const [evtSubTab, setEvtSubTab]   = useState<'live'|'history'>('live');
+  const [walletTxns, setWalletTxns] = useState<Record<string,unknown>[]>([]);
+  const [walletCards, setWalletCards] = useState<Record<string,unknown>[]>([]);
+  const [walletSubTab, setWalletSubTab] = useState<'txns'|'cards'>('txns');
   const [loading, setLoading]   = useState(false);
   const [apiError, setApiError] = useState('');
   const [actionMsg, setActionMsg] = useState('');
@@ -162,8 +165,8 @@ export default function AdminPage() {
   useEffect(() => {
     if (!token) return;
     setLoading(true); setApiError('');
-    Promise.all([api('/admin/stats'), api('/admin/users?limit=100'), api('/admin/trips?limit=100'), api('/admin/drivers'), api('/admin/events/history?limit=200')])
-      .then(([s, u, t, d, eh]) => { setStats(s); setUsers(u.users); setTrips(t.trips); setDrivers(d); setHistEvents(eh); })
+    Promise.all([api('/admin/stats'), api('/admin/users?limit=100'), api('/admin/trips?limit=100'), api('/admin/drivers'), api('/admin/events/history?limit=200'), api('/admin/wallet/transactions'), api('/admin/wallet/cards')])
+      .then(([s, u, t, d, eh, wt, wc]) => { setStats(s); setUsers(u.users); setTrips(t.trips); setDrivers(d); setHistEvents(eh); setWalletTxns(wt); setWalletCards(wc); })
       .catch(err => {
         const status = err?.response?.status;
         if (status === 401 || status === 403) setToken('');
@@ -294,6 +297,7 @@ export default function AdminPage() {
     { id: 'trips',   label: `🏍️ Safari (${trips.length})`   },
     { id: 'drivers', label: `🏍️ Madereva (${drivers.length})` },
     { id: 'events',  label: `⚡ Matukio`   },
+    { id: 'wallet',  label: `💰 Wallet (${walletTxns.length})` },
     { id: 'profile', label: '👤 Profaili'  },
   ];
 
@@ -538,6 +542,93 @@ export default function AdminPage() {
                           </tr>
                         ))
                       }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Wallet Tab ── */}
+        {!loading && tab === 'wallet' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Sub-tab nav */}
+            <div style={{ display: 'flex', gap: '0.35rem', background: '#fff', padding: '0.4rem', borderRadius: 10, width: 'fit-content', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+              {(['txns','cards'] as const).map(st => (
+                <button key={st} onClick={() => setWalletSubTab(st)}
+                  style={{ padding: '0.35rem 0.875rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', background: walletSubTab === st ? '#0f172a' : 'transparent', color: walletSubTab === st ? '#fff' : '#64748b' }}>
+                  {st === 'txns' ? `💸 Miamala (${walletTxns.length})` : `💳 Kadi (${walletCards.length})`}
+                </button>
+              ))}
+            </div>
+
+            {walletSubTab === 'txns' && (
+              <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', borderBottom: '1px solid #f3f4f6' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>Miamala Yote ya Wallet</div>
+                  <ExportBar rows={walletTxns} name="wallet_transactions" />
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        {['#', 'Mtumiaji', 'Simu', 'Aina', 'Kiasi', 'Baada', 'Maelezo', 'Safari', 'Tarehe'].map(h => (
+                          <th key={h} style={thStyle}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {walletTxns.map((tx, i) => (
+                        <tr key={String(tx.id ?? i)}>
+                          <td style={tdStyle}>{String(tx.id)}</td>
+                          <td style={tdStyle}>{String(tx.user_name ?? '')}</td>
+                          <td style={tdStyle}>{String(tx.user_phone ?? '')}</td>
+                          <td style={tdStyle}>
+                            <span style={{ fontWeight: 700, color: tx.type === 'CREDIT' ? '#16a34a' : '#dc2626' }}>{String(tx.type)}</span>
+                          </td>
+                          <td style={{ ...tdStyle, fontWeight: 700, color: tx.type === 'CREDIT' ? '#16a34a' : '#dc2626' }}>
+                            {tx.type === 'CREDIT' ? '+' : '-'}TSh {Number(tx.amount).toLocaleString()}
+                          </td>
+                          <td style={tdStyle}>TSh {Number(tx.balance_after).toLocaleString()}</td>
+                          <td style={{ ...tdStyle, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(tx.description ?? '')}</td>
+                          <td style={{ ...tdStyle, color: '#64748b' }}>{tx.trip_id ? `#${tx.trip_id}` : '—'}</td>
+                          <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>{tx.created_at ? new Date(String(tx.created_at)).toLocaleString() : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {walletSubTab === 'cards' && (
+              <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', borderBottom: '1px solid #f3f4f6' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>Kadi za Virtual za Watumiaji</div>
+                  <ExportBar rows={walletCards} name="virtual_cards" />
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        {['#', 'Mtumiaji', 'Simu', 'Aina', 'Nambari ya Kadi', 'Tarehe ya Kumalizika', 'Tarehe ya Kutengeneza'].map(h => (
+                          <th key={h} style={thStyle}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {walletCards.map((c, i) => (
+                        <tr key={String(c.id ?? i)}>
+                          <td style={tdStyle}>{String(c.id)}</td>
+                          <td style={tdStyle}>{String(c.user_name ?? '')}</td>
+                          <td style={tdStyle}>{String(c.user_phone ?? '')}</td>
+                          <td style={tdStyle}>{String(c.user_role ?? '')}</td>
+                          <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{String(c.card_number ?? '')}</td>
+                          <td style={tdStyle}>{String(c.expiry_month ?? '').padStart(2,'0')}/{String(c.expiry_year ?? '').slice(-2)}</td>
+                          <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>{c.created_at ? new Date(String(c.created_at)).toLocaleString() : ''}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>

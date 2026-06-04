@@ -1,3 +1,5 @@
+import random
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +11,7 @@ from app.core.db import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.wallet import WalletTransaction
+from app.models.virtual_card import VirtualCard
 
 router = APIRouter()
 
@@ -16,6 +19,8 @@ router = APIRouter()
 class TopupRequest(BaseModel):
     amount: float
 
+
+# ── Wallet balance + transactions ─────────────────────────────────────
 
 @router.get("")
 async def get_wallet(
@@ -47,6 +52,8 @@ async def get_wallet(
         ],
     }
 
+
+# ── Top-up ────────────────────────────────────────────────────────────
 
 @router.post("/topup")
 async def topup_wallet(
@@ -80,3 +87,64 @@ async def topup_wallet(
     await db.commit()
 
     return {"balance": float(new_bal), "message": "Pesa zimeongezwa!"}
+
+
+# ── Virtual Card ──────────────────────────────────────────────────────
+
+def _generate_card_number() -> str:
+    """Visa-style: starts with 4, 16 digits, formatted as XXXX XXXX XXXX XXXX."""
+    digits = [4] + [random.randint(0, 9) for _ in range(15)]
+    return ' '.join(''.join(str(d) for d in digits[i:i+4]) for i in range(0, 16, 4))
+
+
+@router.get("/card")
+async def get_card(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(VirtualCard).where(VirtualCard.user_id == current_user.id)
+    )
+    card = result.scalar_one_or_none()
+    if not card:
+        return None
+    return {
+        "card_number": card.card_number,
+        "expiry_month": card.expiry_month,
+        "expiry_year": card.expiry_year,
+        "cvv": card.cvv,
+    }
+
+
+@router.post("/card")
+async def create_card(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    existing = await db.execute(
+        select(VirtualCard).where(VirtualCard.user_id == current_user.id)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Tayari una kadi ya mkoba")
+
+    now = datetime.now(timezone.utc)
+    exp_year = now.year + random.randint(3, 5)
+    exp_month = random.randint(1, 12)
+
+    card = VirtualCard(
+        user_id=current_user.id,
+        card_number=_generate_card_number(),
+        expiry_month=exp_month,
+        expiry_year=exp_year,
+        cvv=str(random.randint(100, 999)),
+    )
+    db.add(card)
+    await db.commit()
+    await db.refresh(card)
+
+    return {
+        "card_number": card.card_number,
+        "expiry_month": card.expiry_month,
+        "expiry_year": card.expiry_year,
+        "cvv": card.cvv,
+    }
