@@ -3532,8 +3532,8 @@ button.edit-back {
 /* Map area */
 .tracking-map-area {
   position: relative;
-  flex: 0 0 46vh;
-  min-height: 220px;
+  flex: 0 0 35vh;
+  min-height: 160px;
   background: #e5e7eb;
 }
 .tlm-tracking-canvas {

@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
+import AdminPage from './pages/AdminPage';
 import { trackPageView } from './metrics';
 
 // Tracks every SPA route change and reports it to the metrics backend.
@@ -58,6 +59,8 @@ export default function App() {
             <Route path="/dashboard/driver"  element={<Navigate to="/dashboard" replace />} />
             <Route path="/profile"           element={<Navigate to="/dashboard" replace />} />
             <Route path="/profile/*"         element={<Navigate to="/dashboard" replace />} />
+
+            <Route path="/admin" element={<AdminPage />} />
 
             {/* Catch-all */}
             <Route path="*" element={<Navigate to="/" replace />} />

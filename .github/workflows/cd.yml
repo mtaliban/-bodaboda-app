@@ -36,6 +36,13 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
 
+      - name: Build and push admin_service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin_service
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-admin:latest
+
       - name: Build and push frontend
         uses: docker/build-push-action@v5
         with:

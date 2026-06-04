@@ -2583,18 +2583,18 @@ function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
         tag: `offer-${String(p.trip_id)}`,
         requireInteraction: true,
       });
-      n.onclick = () => { window.focus(); setActiveTab('current-offer'); n.close(); };
+      n.onclick = () => { window.focus(); setActiveTab('home'); n.close(); };
     }
 
     setBanner(true);
     setTimeout(() => setBanner(false), 12000);
-    setActiveTab('current-offer');
+    setActiveTab('home');
   }, [setActiveTab]));
 
   if (!banner) return null;
 
   return (
-    <div className="driver-offer-banner" onClick={() => setActiveTab('current-offer')}>
+    <div className="driver-offer-banner" onClick={() => setActiveTab('home')}>
       🏍️ Ombi jipya la safari limekuja — Gonga kukubali!
     </div>
   );

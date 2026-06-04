@@ -79,6 +79,29 @@ services:
       - app_net
     restart: unless-stopped
 
+  admin_service:
+    build:
+      context: ./admin_service
+    image: ${DOCKER_USERNAME}/bodaboda-admin:latest
+    container_name: admin_service
+    ports:
+      - "8003:8003"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/auth_db
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: BodaBoda@Admin2026!
+      ADMIN_JWT_SECRET: admin-super-secret-key-change-in-prod
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    networks:
+      - app_net
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
