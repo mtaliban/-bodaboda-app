@@ -1654,7 +1654,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const [driverId, setDriverId]         = useState<number | null>(initialTrip.assigned_driver?.id ?? null);
   const [approaching, setApproaching]   = useState(false);
   const [driverPos, setDriverPos]       = useState<{lat:number;lng:number}|null>(null);
-  const [liveLocPos, setLiveLocPos]     = useState<{lat:number;lng:number;time:string}|null>(null);
+  const [liveLocPos, setLiveLocPos]     = useState<{lat:number|null;lng:number|null;time:string}|null>(null);
   const [chatOpen, setChatOpen]         = useState(false);
   const [chatUnread, setChatUnread]     = useState(0);
   const [declineToast, setDeclineToast] = useState<string | null>(null);
@@ -1703,10 +1703,13 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           rating: 0,
         },
       }));
-      if (evtLat && evtLng) {
-        setDriverPos({ lat: evtLat, lng: evtLng });
-        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
-      }
+      // Show card immediately — with GPS if available, else waiting state
+      setLiveLocPos({
+        lat: evtLat || null,
+        lng: evtLng || null,
+        time: new Date().toLocaleTimeString(),
+      });
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
 
     } else if (event.event_type === 'RIDE_SEARCHING_AGAIN') {
       setTrip(prev => ({ ...prev, status: 'SEARCHING_DRIVER' }));
@@ -1723,15 +1726,19 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
     } else if (event.event_type === 'DRIVER_ARRIVED') {
       setApproaching(false);
       setTrip(prev => ({ ...prev, status: 'DRIVER_ARRIVED' }));
-      if (evtLat && evtLng) { setDriverPos({ lat: evtLat, lng: evtLng }); setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() }); }
+      setLiveLocPos({ lat: evtLat || null, lng: evtLng || null, time: new Date().toLocaleTimeString() });
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
     } else if (event.event_type === 'RIDE_STARTED') {
       setTrip(prev => ({ ...prev, status: 'IN_PROGRESS' }));
-      if (evtLat && evtLng) { setDriverPos({ lat: evtLat, lng: evtLng }); setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() }); }
+      setLiveLocPos({ lat: evtLat || null, lng: evtLng || null, time: new Date().toLocaleTimeString() });
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
     } else if (event.event_type === 'RIDE_COMPLETED') {
       setTrip(prev => ({ ...prev, status: 'COMPLETED' }));
-      if (evtLat && evtLng) { setDriverPos({ lat: evtLat, lng: evtLng }); setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() }); }
+      setLiveLocPos({ lat: evtLat || null, lng: evtLng || null, time: new Date().toLocaleTimeString() });
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
     } else if (event.event_type === 'DRIVER_APPROACHING') {
-      if (evtLat && evtLng) { setDriverPos({ lat: evtLat, lng: evtLng }); setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() }); }
+      setLiveLocPos({ lat: evtLat || null, lng: evtLng || null, time: new Date().toLocaleTimeString() });
+      if (evtLat && evtLng) setDriverPos({ lat: evtLat, lng: evtLng });
     }
   }, [])); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1900,14 +1907,20 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           <p>{statusDescs[trip.status] ?? trip.message}</p>
         </div>
 
-        {/* Driver live location text — Option B: GPS published on every driver action */}
+        {/* Driver live location — Option B: shows on every driver action */}
         {liveLocPos && (
-          <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'10px', padding:'0.6rem 0.9rem', fontSize:'0.82rem', display:'flex', flexDirection:'column', gap:'0.25rem' }}>
-            <span style={{ fontWeight:700, color:'#15803d' }}>📡 Dereva — GPS Halisi (MQTT)</span>
-            <span style={{ color:'#166534' }}>Topic &nbsp;&nbsp;&nbsp;: <strong>driver/{driverId}/location</strong></span>
-            <span style={{ color:'#166534' }}>Latitude : <strong>{liveLocPos.lat.toFixed(6)}</strong></span>
-            <span style={{ color:'#166534' }}>Longitude: <strong>{liveLocPos.lng.toFixed(6)}</strong></span>
-            <span style={{ color:'#6b7280', fontSize:'0.75rem' }}>Ilitumwa: {liveLocPos.time}</span>
+          <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'10px', padding:'0.75rem 1rem', fontSize:'0.82rem', display:'flex', flexDirection:'column', gap:'0.3rem' }}>
+            <span style={{ fontWeight:700, color:'#15803d', fontSize:'0.85rem' }}>📡 Dereva — GPS (MQTT Live)</span>
+            <span style={{ color:'#374151' }}>Topic &nbsp;&nbsp;&nbsp;: <code style={{ background:'#dcfce7', padding:'1px 5px', borderRadius:'4px' }}>driver/{driverId}/location</code></span>
+            {liveLocPos.lat && liveLocPos.lng ? (
+              <>
+                <span style={{ color:'#166534' }}>Latitude &nbsp;: <strong>{liveLocPos.lat.toFixed(6)}</strong></span>
+                <span style={{ color:'#166534' }}>Longitude: <strong>{liveLocPos.lng.toFixed(6)}</strong></span>
+              </>
+            ) : (
+              <span style={{ color:'#d97706' }}>⏳ Inasubiri GPS ya dereva…</span>
+            )}
+            <span style={{ color:'#9ca3af', fontSize:'0.73rem' }}>Ilitumwa: {liveLocPos.time}</span>
           </div>
         )}
 
