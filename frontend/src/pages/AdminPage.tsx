@@ -22,6 +22,31 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   );
 }
 
+function exportCsv(rows: Record<string, unknown>[], filename: string) {
+  if (!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  const csv = [cols.join(','), ...rows.map(r => cols.map(c => JSON.stringify(r[c] ?? '')).join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = filename;
+  a.click();
+}
+
+function BarChart({ data, color }: { data: { label: string; value: number }[]; color: string }) {
+  const max = Math.max(...data.map(d => d.value), 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120, padding: '0.5rem 0' }}>
+      {data.map(d => (
+        <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color }}>{d.value}</div>
+          <div style={{ width: '100%', background: color, borderRadius: '4px 4px 0 0', height: `${Math.round((d.value / max) * 80)}px`, minHeight: d.value ? 4 : 0, opacity: 0.85 }} />
+          <div style={{ fontSize: '0.65rem', color: '#6b7280', textAlign: 'center', lineHeight: 1.1 }}>{d.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [token, setToken]     = useState(() => {
     const t = localStorage.getItem('admin_token') ?? '';
@@ -183,21 +208,44 @@ export default function AdminPage() {
 
         {/* Stats */}
         {!loading && tab === 'stats' && stats && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <StatCard label="Total Users" value={stats.total_users} color="#3b82f6" />
-            <StatCard label="Riders" value={stats.riders} color="#8b5cf6" />
-            <StatCard label="Drivers" value={stats.drivers} color="#f59e0b" />
-            <StatCard label="Total Trips" value={stats.total_trips} color="#6b7280" />
-            <StatCard label="Active Trips" value={stats.active_trips} color="#FF6B00" />
-            <StatCard label="Completed" value={stats.completed_trips} color="#10b981" />
-            <StatCard label="Cancelled" value={stats.cancelled_trips} color="#ef4444" />
-            <StatCard label="Pending Verify" value={stats.pending_verifications} color="#f59e0b" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <StatCard label="Total Users" value={stats.total_users} color="#3b82f6" />
+              <StatCard label="Riders" value={stats.riders} color="#8b5cf6" />
+              <StatCard label="Drivers" value={stats.drivers} color="#f59e0b" />
+              <StatCard label="Total Trips" value={stats.total_trips} color="#6b7280" />
+              <StatCard label="Active Trips" value={stats.active_trips} color="#FF6B00" />
+              <StatCard label="Completed" value={stats.completed_trips} color="#10b981" />
+              <StatCard label="Cancelled" value={stats.cancelled_trips} color="#ef4444" />
+              <StatCard label="Pending Verify" value={stats.pending_verifications} color="#f59e0b" />
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+              <div style={{ flex: 1, minWidth: 220, background: '#fff', borderRadius: 12, padding: '1rem', boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 4, color: '#374151' }}>👥 Watumiaji</div>
+                <BarChart color="#8b5cf6" data={[
+                  { label: 'Riders', value: stats.riders },
+                  { label: 'Drivers', value: stats.drivers },
+                ]} />
+              </div>
+              <div style={{ flex: 2, minWidth: 280, background: '#fff', borderRadius: 12, padding: '1rem', boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 4, color: '#374151' }}>🏍️ Safari</div>
+                <BarChart color="#FF6B00" data={[
+                  { label: 'Zote', value: stats.total_trips },
+                  { label: 'Amilifu', value: stats.active_trips },
+                  { label: 'Zim.', value: stats.completed_trips },
+                  { label: 'Batil.', value: stats.cancelled_trips },
+                ]} />
+              </div>
+            </div>
           </div>
         )}
 
         {/* Users */}
         {!loading && tab === 'users' && (
           <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
+            <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => exportCsv(users as unknown as Record<string,unknown>[], 'users.csv')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>📥 Export CSV</button>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead style={{ background: '#f8fafc' }}>
                 <tr>{['ID','Jina','Email','Simu','Role','Status','Tarehe','Hatua'].map(h => <th key={h} style={{ padding: '0.65rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>)}</tr>
@@ -236,6 +284,9 @@ export default function AdminPage() {
         {/* Trips */}
         {!loading && tab === 'trips' && (
           <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
+            <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => exportCsv(trips as unknown as Record<string,unknown>[], 'trips.csv')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>📥 Export CSV</button>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead style={{ background: '#f8fafc' }}>
                 <tr>{['ID','Jina','Pickup','Destination','Status','Rider','Tarehe'].map(h => <th key={h} style={{ padding: '0.65rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>)}</tr>
@@ -260,6 +311,9 @@ export default function AdminPage() {
         {/* Drivers */}
         {!loading && tab === 'drivers' && (
           <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
+            <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => exportCsv(drivers as unknown as Record<string,unknown>[], 'drivers.csv')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>📥 Export CSV</button>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead style={{ background: '#f8fafc' }}>
                 <tr>{['Jina','Simu','Gari','Sahani','Verification','Status','Rating','Trips','Hatua'].map(h => <th key={h} style={{ padding: '0.65rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>)}</tr>

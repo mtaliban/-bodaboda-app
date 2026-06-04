@@ -35,7 +35,8 @@ type Tab =
   | 'home' | 'settings' | 'profile' | 'edit-account' | 'edit-profile'
   | 'request-ride' | 'my-trips'
   | 'offer-history'
-  | 'notifications';
+  | 'notifications'
+  | 'wallet';
 
 type NavItem = { tab: Tab; label: string; icon: ReactNode; badge?: number };
 
@@ -791,10 +792,10 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
     const dLat = trip.destination_lat ?? pLat, dLng = trip.destination_lng ?? pLng;
     const r = () => (Math.random() - 0.5) * 0.002;
     const byEvent: Record<string, { lat: number; lng: number; address?: string }> = {
-      RIDE_STARTED:    { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address },
-      RIDE_ACCEPTED:   { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address },
-      DRIVER_APPROACHING: { lat: (pLat+dLat)/2 + r(), lng: (pLng+dLng)/2 + r() },
-      RIDE_COMPLETED:  { lat: dLat + r()/2, lng: dLng + r()/2, address: trip.destination_address },
+      RIDE_STARTED:    { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address ?? 'Mahali pa kuanzia' },
+      RIDE_ACCEPTED:   { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address ?? 'Mahali pa kuanzia' },
+      DRIVER_APPROACHING: { lat: (pLat+dLat)/2 + r(), lng: (pLng+dLng)/2 + r(), address: `Karibu na ${trip.pickup_address ?? 'Mahali pa kuanzia'}` },
+      RIDE_COMPLETED:  { lat: dLat + r()/2, lng: dLng + r()/2, address: trip.destination_address ?? 'Mahali pa kwenda' },
     };
     const fallback = byEvent[eventType] ?? { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address };
     if (!navigator.geolocation) return Promise.resolve(fallback);
@@ -1615,8 +1616,16 @@ function SettingsTab({ user, updateUser }: { user: User; updateUser: (u: User) =
                 </div>
               </div>
               <div className="form-group">
-                <label>URL ya Picha ya Wasifu</label>
-                <input name="profile_image_url" type="url" value={accForm.profile_image_url} onChange={handleAccChange} placeholder="https://example.com/picha.jpg" />
+                <label>Picha ya Wasifu</label>
+                <input type="file" accept="image/*" style={{ fontSize:'0.82rem' }}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => setAccForm(p => ({ ...p, profile_image_url: ev.target?.result as string }));
+                    reader.readAsDataURL(file);
+                  }}
+                />
                 {accForm.profile_image_url && (
                   <img src={accForm.profile_image_url} alt="preview" className="settings-img-preview"
                     onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -1988,25 +1997,18 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           <p>{statusDescs[trip.status] ?? trip.message}</p>
         </div>
 
-        {/* Driver live location — Option B: shows on every driver action */}
-        {liveLocPos && (
-          <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'10px', padding:'0.75rem 1rem', fontSize:'0.82rem', display:'flex', flexDirection:'column', gap:'0.3rem' }}>
-            <span style={{ fontWeight:700, color:'#15803d', fontSize:'0.85rem' }}>📡 Dereva — GPS (MQTT Live)</span>
-            <span style={{ color:'#374151' }}>Topic &nbsp;&nbsp;&nbsp;: <code style={{ background:'#dcfce7', padding:'1px 5px', borderRadius:'4px' }}>driver/{driverId}/location</code></span>
-            {liveLocPos.lat && liveLocPos.lng ? (
-              <>
-                {liveLocPos.address && (
-                  <span style={{ color:'#15803d', fontWeight:600 }}>📍 Eneo: <strong>{liveLocPos.address}</strong></span>
-                )}
-                <span style={{ color:'#166534' }}>Latitude &nbsp;: <strong>{liveLocPos.lat.toFixed(6)}</strong></span>
-                <span style={{ color:'#166534' }}>Longitude: <strong>{liveLocPos.lng.toFixed(6)}</strong></span>
-              </>
-            ) : (
-              <span style={{ color:'#d97706' }}>⏳ Inasubiri GPS ya dereva…</span>
-            )}
-            <span style={{ color:'#9ca3af', fontSize:'0.73rem' }}>Ilitumwa: {liveLocPos.time}</span>
+        {/* Driver live location — compact chip */}
+        {liveLocPos && liveLocPos.lat && liveLocPos.lng ? (
+          <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'99px', padding:'0.3rem 0.75rem', fontSize:'0.75rem', flexWrap:'wrap' }}>
+            <span style={{ color:'#15803d', fontWeight:700 }}>📡</span>
+            {liveLocPos.address && <span style={{ color:'#166534', fontWeight:600 }}>{liveLocPos.address}</span>}
+            <span style={{ color:'#6b7280' }}>·</span>
+            <span style={{ color:'#374151', fontFamily:'monospace' }}>{liveLocPos.lat.toFixed(5)}, {liveLocPos.lng.toFixed(5)}</span>
+            <span style={{ color:'#9ca3af' }}>· {liveLocPos.time}</span>
           </div>
-        )}
+        ) : liveLocPos ? (
+          <div style={{ fontSize:'0.75rem', color:'#d97706', padding:'0.25rem 0' }}>⏳ Inasubiri GPS ya dereva…</div>
+        ) : null}
 
         {/* Approaching banner */}
         {approaching && (
@@ -2521,14 +2523,126 @@ const IconList = () => (
     <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z" />
   </svg>
 );
+// ── Wallet Tab ────────────────────────────────────────────────────────
+
+function WalletTab() {
+  const [data, setData] = useState<{ balance: number; transactions: { id: number; type: string; amount: number; balance_after: number; trip_id?: number; description: string; created_at: string }[] } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [topupAmount, setTopupAmount] = useState('');
+  const [topupLoading, setTopupLoading] = useState(false);
+  const [topupMsg, setTopupMsg] = useState('');
+  const [topupErr, setTopupErr] = useState('');
+  const [showTopup, setShowTopup] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data: d } = await api.get('/wallet');
+      setData(d);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const doTopup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTopupErr(''); setTopupMsg(''); setTopupLoading(true);
+    try {
+      const amount = parseFloat(topupAmount);
+      if (!amount || amount < 500) { setTopupErr('Kiwango cha chini ni TSh 500'); setTopupLoading(false); return; }
+      const { data: d } = await api.post('/wallet/topup', { amount });
+      setTopupMsg(d.message ?? 'Pesa zimeongezwa!');
+      setTopupAmount('');
+      setShowTopup(false);
+      await load();
+    } catch (err) { setTopupErr(extractApiError(err)); }
+    setTopupLoading(false);
+  };
+
+  return (
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div style={{ textAlign: 'center', background: 'linear-gradient(135deg,#FF6B00,#ff9100)', borderRadius: 16, padding: '1.5rem', color: '#fff' }}>
+        <div style={{ fontSize: '0.85rem', opacity: 0.85, marginBottom: 4 }}>Salio la Mkoba Wako</div>
+        <div style={{ fontSize: '2.4rem', fontWeight: 800, letterSpacing: '-1px' }}>
+          {loading ? '…' : `TSh ${(data?.balance ?? 0).toLocaleString()}`}
+        </div>
+        <button
+          onClick={() => setShowTopup(s => !s)}
+          style={{ marginTop: '1rem', background: '#fff', color: '#FF6B00', border: 'none', borderRadius: 99, padding: '0.5rem 1.5rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+          + Ongeza Pesa
+        </button>
+      </div>
+
+      {topupMsg && <Alert type="success" message={topupMsg} />}
+
+      {showTopup && (
+        <form onSubmit={doTopup} style={{ background: '#fff', borderRadius: 12, padding: '1rem', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Ongeza Pesa Mkononi</div>
+          {topupErr && <Alert type="error" message={topupErr} />}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {[1000, 5000, 10000, 20000].map(amt => (
+              <button key={amt} type="button"
+                onClick={() => setTopupAmount(String(amt))}
+                style={{ flex: 1, padding: '0.4rem', background: topupAmount === String(amt) ? '#FF6B00' : '#f3f4f6', color: topupAmount === String(amt) ? '#fff' : '#374151', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}>
+                {(amt/1000).toFixed(0)}k
+              </button>
+            ))}
+          </div>
+          <input
+            type="number" min="500" max="500000" step="100"
+            placeholder="Au weka kiasi (TSh)"
+            value={topupAmount}
+            onChange={e => setTopupAmount(e.target.value)}
+            style={{ padding: '0.65rem', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: '0.9rem' }}
+          />
+          <button type="submit" disabled={topupLoading} className="btn btn-primary">
+            {topupLoading ? <><span className="btn-spinner" /> Inaongeza…</> : 'Thibitisha'}
+          </button>
+        </form>
+      )}
+
+      <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>
+        <div style={{ padding: '0.75rem 1rem', fontWeight: 700, fontSize: '0.88rem', borderBottom: '1px solid #f3f4f6' }}>📋 Historia ya Malipo</div>
+        {loading ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Inapakia…</div>
+        ) : !data?.transactions.length ? (
+          <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>Hakuna shughuli bado.</div>
+        ) : (
+          <div>
+            {data.transactions.map(t => (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: '0.65rem 1rem', borderBottom: '1px solid #f9fafb', gap: '0.75rem' }}>
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: t.type === 'CREDIT' ? '#f0fdf4' : '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
+                  {t.type === 'CREDIT' ? '⬆️' : '⬇️'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: t.type === 'CREDIT' ? '#10b981' : '#ef4444' }}>
+                    {t.type === 'CREDIT' ? '+' : '-'}TSh {t.amount.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Bal: {t.balance_after.toLocaleString()}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Nav items (role-aware) ────────────────────────────────────────────
 
 function getNavItems(role: string, _unreadCount: number): NavItem[] {
   if (role === 'RIDER') {
     return [
       { tab: 'home',         label: 'Home',         icon: <IconHome />     },
-      { tab: 'request-ride', label: 'Request Ride', icon: <IconMoto />     },
+      { tab: 'request-ride', label: 'Ride',         icon: <IconMoto />     },
       { tab: 'my-trips',     label: 'My Trips',     icon: <IconList />     },
+      { tab: 'wallet',       label: 'Wallet',       icon: <span style={{fontSize:'1.1rem'}}>💰</span> },
       { tab: 'settings',     label: 'Settings',     icon: <IconSettings /> },
     ];
   }
@@ -2726,6 +2840,7 @@ export default function Dashboard() {
           {activeTab === 'request-ride'  && isRider  && <RequestRideTab  setActiveTab={handleTabChange} />}
           {activeTab === 'my-trips'      && isRider  && <MyTripsTab      setActiveTab={handleTabChange} />}
           {activeTab === 'offer-history' && isDriver && <OfferHistoryTab />}
+          {activeTab === 'wallet'        && isRider  && <WalletTab />}
           {activeTab === 'notifications' && <NotificationsTab onRead={() => setUnreadCount(0)} />}
         </div>
       </div>

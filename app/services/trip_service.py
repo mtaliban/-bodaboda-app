@@ -27,10 +27,29 @@ from app.models.driver_trip_offer import DriverTripOffer, OfferStatus
 from app.models.trip import Trip, TripStatus
 from app.models.trip_status_history import TripStatusHistory, ChangedBy
 from app.models.user import User, UserRole
+import math as _math
+from decimal import Decimal
+
 from app.schemas.trip import TripRequest
 from app.services.driver_service import DriverService
 from app.services.mqtt_service import publish_ride_requested, publish_ride_status
 from app.services.notification_service import NotificationService
+from app.models.wallet import WalletTransaction
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    dlat = _math.radians(lat2 - lat1)
+    dlng = _math.radians(lng2 - lng1)
+    a = _math.sin(dlat/2)**2 + _math.cos(_math.radians(lat1)) * _math.cos(_math.radians(lat2)) * _math.sin(dlng/2)**2
+    return R * 2 * _math.asin(_math.sqrt(a))
+
+
+def _calc_fare(trip: "Trip") -> int:
+    if trip.pickup_lat and trip.pickup_lng and trip.destination_lat and trip.destination_lng:
+        km = _haversine_km(trip.pickup_lat, trip.pickup_lng, trip.destination_lat, trip.destination_lng)
+        return max(1500, round((1000 + 400 * km) / 10) * 10)
+    return 1500
 
 _ACTIVE_STATUSES = {
     TripStatus.SEARCHING_DRIVER,
@@ -373,11 +392,42 @@ class TripService:
             status=TripStatus.COMPLETED.value,
             changed_by=ChangedBy.DRIVER,
         ))
+
+        # Auto-deduct fare from rider's wallet
+        from sqlalchemy import update
+        from app.models.rider_profile import RiderProfile
+        fare = _calc_fare(trip)
+        rp_result = await self.db.execute(
+            select(RiderProfile).where(RiderProfile.id == trip.rider_id)
+        )
+        rp = rp_result.scalar_one_or_none()
+        rider_user_result = await self.db.execute(
+            select(User).where(User.id == rp.user_id)
+        ) if rp else None
+        rider_user = rider_user_result.scalar_one_or_none() if rider_user_result else None
+        if rider_user is not None:
+            old_bal = Decimal(str(getattr(rider_user, 'wallet_balance', 0) or 0))
+            new_bal = max(Decimal('0'), old_bal - Decimal(str(fare)))
+            await self.db.execute(
+                update(User).where(User.id == rider_user.id).values(wallet_balance=new_bal)
+            )
+            self.db.add(WalletTransaction(
+                user_id=rider_user.id,
+                type="DEBIT",
+                amount=Decimal(str(fare)),
+                balance_after=new_bal,
+                trip_id=trip.id,
+                description=f"Safari #{trip.id} — {trip.pickup_address or ''} → {trip.destination_address or ''}",
+            ))
+            wallet_msg = f"TSh {fare:,} imekatwa kwa safari yako."
+        else:
+            wallet_msg = "Safari imekamilika."
+
         await self.notif_svc.create(
             recipient_role="RIDER",
             recipient_profile_id=trip.rider_id,
-            title="Trip completed",
-            message="Your trip has been completed.",
+            title="Safari imekamilika",
+            message=wallet_msg,
             type="TRIP_COMPLETED",
             related_trip_id=trip.id,
         )

@@ -10,6 +10,7 @@ from app.models.driver_trip_offer import DriverTripOffer, OfferStatus
 from app.models.password_reset_token import PasswordResetToken, ResetMethod
 from app.models.email_verification import EmailVerification
 from app.models.chat_message import ChatMessage
+from app.models.wallet import WalletTransaction
 
 __all__ = [
     "User", "UserRole", "UserStatus",
@@ -24,4 +25,5 @@ __all__ = [
     "PasswordResetToken", "ResetMethod",
     "EmailVerification",
     "ChatMessage",
+    "WalletTransaction",
 ]

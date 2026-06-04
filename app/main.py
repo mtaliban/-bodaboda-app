@@ -12,6 +12,7 @@ from app.routers.trips import router as trips_router
 from app.routers.drivers import router as drivers_router
 from app.routers.notifications import router as notifications_router
 from app.routers.ws_chat import router as ws_chat_router
+from app.routers.wallet import router as wallet_router
 from app.metrics import (
     FRONTEND_PAGE_LOADS,
     FRONTEND_PAGE_LOAD_DURATION,
@@ -61,6 +62,7 @@ app.include_router(trips_router, prefix="/trips", tags=["Trips"])
 app.include_router(drivers_router, prefix="/drivers", tags=["Drivers"])
 app.include_router(notifications_router, prefix="/notifications", tags=["Notifications"])
 app.include_router(ws_chat_router, tags=["WebSocket"])
+app.include_router(wallet_router, prefix="/wallet", tags=["Wallet"])
 
 
 @app.middleware("http")
