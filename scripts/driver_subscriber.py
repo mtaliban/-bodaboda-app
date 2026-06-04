@@ -1,8 +1,8 @@
 """
 Driver Subscriber Simulation — CS 421 BodaBoda MQTT
 =====================================================
-Simulates a driver app listening for new ride requests.
-Run this script to see real-time events from the backend.
+Simulates a driver app listening for new ride requests,
+ride status changes, and real-time GPS location updates.
 
 Usage:
   python scripts/driver_subscriber.py
@@ -45,14 +45,56 @@ def print_event(topic: str, event: dict) -> None:
         print()
         print(f"  👉  Kubali: POST http://localhost:8001/trips/{payload.get('trip_id')}/accept")
 
-    elif "ACCEPTED" in et:
+    elif et == "RIDE_ACCEPTED":
         print(f"  ✅  SAFARI IMEKUBALIWA")
+        print(f"  trip_id    : {payload.get('trip_id')}")
+        print(f"  driver_id  : {payload.get('driver_id')}")
+        print(f"  Dereva     : {payload.get('driver_name')}")
+        print(f"  Gari       : {payload.get('vehicle')} ({payload.get('plate')})")
+        print(f"  Status     : {payload.get('status')}")
+
+    elif et == "RIDE_STARTED":
+        print(f"  🚀  SAFARI IMEANZA")
         print(f"  trip_id  : {payload.get('trip_id')}")
         print(f"  Status   : {payload.get('status')}")
 
-    elif "COMPLETED" in et:
+    elif et == "RIDE_COMPLETED":
         print(f"  🏁  SAFARI IMEKAMILIKA")
         print(f"  trip_id  : {payload.get('trip_id')}")
+        print(f"  Status   : {payload.get('status')}")
+
+    elif et == "DRIVER_APPROACHING":
+        print(f"  📡  DEREVA ANAKARIBIA")
+        print(f"  trip_id    : {payload.get('trip_id')}")
+        print(f"  Dereva     : {payload.get('driver_name')}")
+        lat = payload.get('lat')
+        lng = payload.get('lng')
+        if lat and lng:
+            print(f"  GPS sasa   : {lat}, {lng}")
+
+    elif et == "DRIVER_ARRIVED":
+        print(f"  📍  DEREVA AMEFIKA")
+        print(f"  trip_id  : {payload.get('trip_id')}")
+
+    elif et == "DRIVER_LOCATION":
+        lat = payload.get('lat')
+        lng = payload.get('lng')
+        driver_id = payload.get('driver_id')
+        trip_id   = payload.get('trip_id')
+        print(f"  📍  DRIVER GPS UPDATE")
+        print(f"  driver_id : {driver_id}")
+        print(f"  trip_id   : {trip_id}")
+        print(f"  Latitude  : {lat}")
+        print(f"  Longitude : {lng}")
+        if lat and lng:
+            print(f"  Maps link : https://maps.google.com/?q={lat},{lng}")
+
+    elif et == "RIDE_AVAILABLE":
+        print(f"  📢  SAFARI INAPATIKANA (broadcast kwa drivers)")
+        print(f"  trip_id          : {payload.get('trip_id')}")
+        print(f"  Kutoka           : {payload.get('pickup_address')}")
+        print(f"  Kwenda           : {payload.get('destination_address')}")
+        print(f"  Drivers wanaopatikana: {payload.get('available_driver_count')}")
 
     else:
         print(f"  Payload: {json.dumps(payload, indent=4)}")
@@ -61,14 +103,27 @@ def print_event(topic: str, event: dict) -> None:
 
 
 async def run(driver_id: int) -> None:
-    print(f"\n🚗  Driver #{driver_id} — BodaBoda Subscriber")
+    print(f"\n🚗  Driver #{driver_id} — BodaBoda MQTT Subscriber")
     print(f"    Inaunganisha kwa MQTT broker {MQTT_HOST}:{MQTT_PORT}...")
 
     async with aiomqtt.Client(hostname=MQTT_HOST, port=MQTT_PORT) as client:
-        # Subscribe to new rides and all ride status updates
+        # Option A: Ride requests
         await client.subscribe("rides/new", qos=1)
+        # Option C: Ride status updates (accepted, started, completed)
         await client.subscribe("rides/+/status", qos=1)
-        print(f"    ✅  Imeunganika! Inasubiri safari mpya...\n")
+        # Option B: Driver GPS location updates
+        await client.subscribe(f"driver/{driver_id}/location", qos=1)
+        await client.subscribe("driver/+/location", qos=1)
+        # Broadcast to available drivers
+        await client.subscribe("drivers/available/rides", qos=1)
+
+        print(f"    ✅  Imeunganika! Inasikiliza topics:")
+        print(f"        • rides/new                  (Option A — safari mpya)")
+        print(f"        • rides/+/status             (Option C — status updates)")
+        print(f"        • driver/{driver_id}/location        (Option B — GPS yangu)")
+        print(f"        • driver/+/location          (Option B — GPS drivers wote)")
+        print(f"        • drivers/available/rides    (broadcast kwa drivers)")
+        print(f"\n    Inasubiri ujumbe...\n")
 
         async for message in client.messages:
             topic = str(message.topic)
@@ -80,7 +135,7 @@ async def run(driver_id: int) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--driver-id", type=int, default=1)
+    parser = argparse.ArgumentParser(description="BodaBoda MQTT Subscriber Simulation")
+    parser.add_argument("--driver-id", type=int, default=1, help="Driver ID (default: 1)")
     args = parser.parse_args()
     asyncio.run(run(args.driver_id))
