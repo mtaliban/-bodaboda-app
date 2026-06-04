@@ -1061,7 +1061,6 @@ function DriverHomePanel() {
       setMsg('Umekubali safari! Nenda pickup point.');
       if (driver) {
         publishGpsEvent(`rides/${tripId}/status`, 'RIDE_ACCEPTED', { trip_id: tripId, driver_id: driver.id, driver_name: driver.full_name });
-        publishGpsEvent(`driver/${driver.id}/location`, 'DRIVER_LOCATION');
       }
       setMsgType('success');
       await refreshDriver();
@@ -1091,7 +1090,6 @@ function DriverHomePanel() {
         await refreshDriver();
       } else {
         publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_STARTED', { trip_id: currentTrip.id, driver_id: driver?.id });
-        if (driver) publishGpsEvent(`driver/${driver.id}/location`, 'DRIVER_LOCATION');
         setCurrentTrip(data);
       }
     } catch (err) {
@@ -2755,7 +2753,9 @@ function WalletTab() {
       const { data: d } = await api.post<{ balance: number; message: string }>('/wallet/topup', { amount: val });
       setMsg(d.message ?? 'Pesa zimeongezwa!');
       setAmount('');
-      await loadWallet();
+      // Update balance instantly from response, then silently refresh transactions
+      setData(prev => prev ? { ...prev, balance: d.balance } : { balance: d.balance, transactions: [] });
+      api.get<WalletData>('/wallet').then(({ data: w }) => setData(w)).catch(() => {});
     } catch (err) {
       setTopupErr(extractApiError(err));
     } finally {
