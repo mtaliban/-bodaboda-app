@@ -30,42 +30,37 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function App() {
+function AppShell() {
+  const { pathname } = useLocation();
+  const isAdmin = pathname.startsWith('/admin');
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <PageTracker />
-        <Navbar />
-        <main>
+    <>
+      <PageTracker />
+      {!isAdmin && <Navbar />}
+      <main>
           <Routes>
-            {/* Public — redirect to dashboard if already logged in */}
             <Route path="/" element={<PublicRoute><Home /></PublicRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
-
-            {/* Authenticated — single dashboard handles all tabs internally */}
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Redirect old per-page routes into the dashboard */}
-            <Route path="/dashboard/rider"   element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard/driver"  element={<Navigate to="/dashboard" replace />} />
-            <Route path="/profile"           element={<Navigate to="/dashboard" replace />} />
-            <Route path="/profile/*"         element={<Navigate to="/dashboard" replace />} />
-
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/dashboard/rider"  element={<Navigate to="/dashboard" replace />} />
+            <Route path="/dashboard/driver" element={<Navigate to="/dashboard" replace />} />
+            <Route path="/profile"          element={<Navigate to="/dashboard" replace />} />
+            <Route path="/profile/*"        element={<Navigate to="/dashboard" replace />} />
             <Route path="/admin" element={<AdminPage />} />
-
-            {/* Catch-all */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppShell />
       </AuthProvider>
     </BrowserRouter>
   );

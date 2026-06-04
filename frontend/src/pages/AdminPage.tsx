@@ -3,81 +3,182 @@ import axios from 'axios';
 
 const ADMIN_API = `${window.location.protocol}//${window.location.host}/admin-api`;
 
-interface Stats {
-  total_users: number; riders: number; drivers: number;
-  total_trips: number; active_trips: number; completed_trips: number;
-  cancelled_trips: number; pending_verifications: number;
-}
+interface Stats { total_users: number; riders: number; drivers: number; total_trips: number; active_trips: number; completed_trips: number; cancelled_trips: number; pending_verifications: number; }
 interface AdminUser { id: number; full_name: string; email: string; phone: string; role: string; status: string; created_at: string; driver_verification?: string; }
 interface AdminTrip { id: number; trip_name: string; pickup_address: string; destination_address: string; status: string; rider_name: string; created_at: string; }
 interface AdminDriver { user_id: number; full_name: string; email: string; phone: string; profile_id: number; license_number: string; vehicle_model: string; plate_number: string; verification_status: string; driver_status: string; rating: number; total_trips: number; }
-interface Event { topic: string; event_type?: string; timestamp: string; [key: string]: unknown; }
+interface LiveEvent { topic: string; event_type?: string; timestamp: string; [key: string]: unknown; }
+interface HistEvent { id: number; trip_id: number; event_type: string; changed_by: string; timestamp: string; trip_name: string; pickup_address: string; destination_address: string; rider_name: string; }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <div style={{ background: '#fff', border: `2px solid ${color}`, borderRadius: 12, padding: '1rem 1.25rem', flex: 1, minWidth: 140 }}>
-      <div style={{ fontSize: '1.8rem', fontWeight: 800, color }}>{value}</div>
-      <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 2 }}>{label}</div>
-    </div>
-  );
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtDate(s: string) { return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
+function fmtTime(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
 function exportCsv(rows: Record<string, unknown>[], filename: string) {
   if (!rows.length) return;
   const cols = Object.keys(rows[0]);
   const csv = [cols.join(','), ...rows.map(r => cols.map(c => JSON.stringify(r[c] ?? '')).join(','))].join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  a.download = filename;
-  a.click();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = filename; a.click();
+}
+
+function exportExcel(rows: Record<string, unknown>[], filename: string) {
+  if (!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  const ths = cols.map(c => `<th style="background:#1e293b;color:#fff;padding:6px 10px;border:1px solid #334155">${c}</th>`).join('');
+  const trs = rows.map(r => `<tr>${cols.map(c => `<td style="padding:5px 10px;border:1px solid #e5e7eb">${r[c] ?? ''}</td>`).join('')}</tr>`).join('');
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"/></head><body><table>${ths}${trs}</table></body></html>`;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'application/vnd.ms-excel' })); a.download = filename; a.click();
+}
+
+function ExportBar({ rows, name }: { rows: Record<string, unknown>[]; name: string }) {
+  return (
+    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+      <button onClick={() => exportCsv(rows, `${name}.csv`)} style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>📥 CSV</button>
+      <button onClick={() => exportExcel(rows, `${name}.xls`)} style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>📊 Excel</button>
+    </div>
+  );
+}
+
+function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div style={{ background: '#fff', border: `2px solid ${color}20`, borderRadius: 12, padding: '1rem 1.25rem', flex: 1, minWidth: 130, borderLeft: `4px solid ${color}` }}>
+      <div style={{ fontSize: '2rem', fontWeight: 800, color }}>{value}</div>
+      <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: 2, fontWeight: 500 }}>{label}</div>
+    </div>
+  );
 }
 
 function BarChart({ data, color }: { data: { label: string; value: number }[]; color: string }) {
   const max = Math.max(...data.map(d => d.value), 1);
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 120, padding: '0.5rem 0' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 130, padding: '0.5rem 0 0' }}>
       {data.map(d => (
         <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <div style={{ fontSize: '0.7rem', fontWeight: 700, color }}>{d.value}</div>
-          <div style={{ width: '100%', background: color, borderRadius: '4px 4px 0 0', height: `${Math.round((d.value / max) * 80)}px`, minHeight: d.value ? 4 : 0, opacity: 0.85 }} />
-          <div style={{ fontSize: '0.65rem', color: '#6b7280', textAlign: 'center', lineHeight: 1.1 }}>{d.label}</div>
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color }}>{d.value}</div>
+          <div title={`${d.label}: ${d.value}`} style={{ width: '60%', background: color, borderRadius: '4px 4px 0 0', height: `${Math.max(Math.round((d.value / max) * 90), d.value ? 3 : 0)}px`, opacity: 0.82, transition: 'height 0.4s ease' }} />
+          <div style={{ fontSize: '0.62rem', color: '#9ca3af', textAlign: 'center', lineHeight: 1.2 }}>{d.label}</div>
         </div>
       ))}
     </div>
   );
 }
 
+function Badge({ text, color }: { text: string; color: string }) {
+  const map: Record<string, { bg: string; fg: string }> = {
+    COMPLETED: { bg: '#f0fdf4', fg: '#16a34a' }, CANCELLED: { bg: '#fef2f2', fg: '#dc2626' },
+    IN_PROGRESS: { bg: '#fff7ed', fg: '#ea580c' }, SEARCHING_DRIVER: { bg: '#fefce8', fg: '#ca8a04' },
+    DRIVER_ASSIGNED: { bg: '#eff6ff', fg: '#2563eb' }, DRIVER_ARRIVED: { bg: '#f5f3ff', fg: '#7c3aed' },
+    VERIFIED: { bg: '#f0fdf4', fg: '#16a34a' }, PENDING: { bg: '#fff7ed', fg: '#ea580c' }, REJECTED: { bg: '#fef2f2', fg: '#dc2626' },
+    active: { bg: '#f0fdf4', fg: '#16a34a' }, suspended: { bg: '#fef2f2', fg: '#dc2626' },
+    RIDER: { bg: '#f5f3ff', fg: '#7c3aed' }, DRIVER: { bg: '#fefce8', fg: '#b45309' },
+  };
+  const s = map[text] ?? { bg: color + '18', fg: color };
+  return <span style={{ background: s.bg, color: s.fg, padding: '0.2rem 0.55rem', borderRadius: 99, fontSize: '0.72rem', fontWeight: 700, whiteSpace: 'nowrap' }}>{text}</span>;
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '1.5rem', width: '100%', maxWidth: 440, display: 'flex', flexDirection: 'column', gap: '1rem', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>{title}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Input({ label, value, onChange, type = 'text', placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        style={{ padding: '0.6rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: 8, fontSize: '0.85rem', outline: 'none' }} />
+    </div>
+  );
+}
+
+function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ padding: '0.6rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: 8, fontSize: '0.85rem' }}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ── Main AdminPage ────────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const [token, setToken]     = useState(() => {
+  const [token, setToken] = useState(() => {
     const t = localStorage.getItem('admin_token') ?? '';
     if (!t) return '';
-    try {
-      const payload = JSON.parse(atob(t.split('.')[1]));
-      if (payload.exp * 1000 < Date.now()) {
-        localStorage.removeItem('admin_token');
-        return '';
-      }
-    } catch { localStorage.removeItem('admin_token'); return ''; }
+    try { const p = JSON.parse(atob(t.split('.')[1])); if (p.exp * 1000 < Date.now()) { localStorage.removeItem('admin_token'); return ''; } } catch { localStorage.removeItem('admin_token'); return ''; }
     return t;
   });
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginErr, setLoginErr]   = useState('');
-  const [stats,    setStats]   = useState<Stats | null>(null);
-  const [users,    setUsers]   = useState<AdminUser[]>([]);
-  const [trips,    setTrips]   = useState<AdminTrip[]>([]);
-  const [drivers,  setDrivers] = useState<AdminDriver[]>([]);
-  const [tab,      setTab]     = useState<'stats'|'users'|'trips'|'drivers'|'events'>('stats');
-  const [events,   setEvents]  = useState<Event[]>([]);
-  const [loading,  setLoading] = useState(false);
+  const [stats,   setStats]    = useState<Stats | null>(null);
+  const [users,   setUsers]    = useState<AdminUser[]>([]);
+  const [trips,   setTrips]    = useState<AdminTrip[]>([]);
+  const [drivers, setDrivers]  = useState<AdminDriver[]>([]);
+  const [tab, setTab] = useState<'stats'|'users'|'trips'|'drivers'|'events'|'profile'>('stats');
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
+  const [histEvents, setHistEvents] = useState<HistEvent[]>([]);
+  const [evtSubTab, setEvtSubTab]   = useState<'live'|'history'>('live');
+  const [loading, setLoading]   = useState(false);
   const [apiError, setApiError] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
-  const [editUser, setEditUser] = useState<AdminUser | null>(null);
-  const [editForm, setEditForm] = useState({ full_name: '', email: '', phone: '' });
+
+  // Edit modals
+  const [editUser,   setEditUser]   = useState<AdminUser | null>(null);
+  const [editUserForm, setEditUserForm] = useState({ full_name: '', email: '', phone: '', role: '', status: '' });
+  const [editDriver, setEditDriver] = useState<AdminDriver | null>(null);
+  const [editDriverForm, setEditDriverForm] = useState({ full_name: '', email: '', phone: '', vehicle_model: '', plate_number: '', license_number: '', verification_status: '', status: '' });
+  const [editTrip,   setEditTrip]   = useState<AdminTrip | null>(null);
+  const [editTripForm, setEditTripForm] = useState({ trip_name: '', status: '', pickup_address: '', destination_address: '' });
   const [resetPwdUser, setResetPwdUser] = useState<AdminUser | null>(null);
   const [newPassword, setNewPassword] = useState('');
-  const [actionMsg, setActionMsg] = useState('');
+
+  // Admin profile (local)
+  const [profileName, setProfileName]   = useState(() => localStorage.getItem('admin_display_name') || 'Admin');
+  const [profileEmail, setProfileEmail] = useState(() => localStorage.getItem('admin_email') || '');
+  const [profileImg, setProfileImg]     = useState(() => localStorage.getItem('admin_img') || '');
+  const [profileSaved, setProfileSaved] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}` };
+
+  const api = useCallback(async (path: string) => {
+    const { data } = await axios.get(`${ADMIN_API}${path}`, { headers });
+    return data;
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toast = (msg: string) => { setActionMsg(msg); setTimeout(() => setActionMsg(''), 3000); };
+
+  useEffect(() => {
+    if (!token) return;
+    setLoading(true); setApiError('');
+    Promise.all([api('/admin/stats'), api('/admin/users?limit=100'), api('/admin/trips?limit=100'), api('/admin/drivers'), api('/admin/events/history?limit=200')])
+      .then(([s, u, t, d, eh]) => { setStats(s); setUsers(u.users); setTrips(t.trips); setDrivers(d); setHistEvents(eh); })
+      .catch(err => {
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) setToken('');
+        else setApiError(`Hitilafu: ${status ?? 'seva haijibu'}`);
+      }).finally(() => setLoading(false));
+  }, [token, api]);
+
+  useEffect(() => {
+    if (!token) return;
+    const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${wsProto}://${window.location.host}/admin-api/admin/ws?token=${encodeURIComponent(token)}`);
+    wsRef.current = ws;
+    ws.onmessage = e => { try { const ev = JSON.parse(e.data as string) as LiveEvent; setLiveEvents(p => [ev, ...p].slice(0, 200)); } catch {} };
+    return () => { ws.close(); wsRef.current = null; };
+  }, [token]);
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault(); setLoginErr('');
@@ -85,344 +186,481 @@ export default function AdminPage() {
       const { data } = await axios.post(`${ADMIN_API}/admin/login`, loginForm);
       localStorage.setItem('admin_token', data.access_token);
       setToken(data.access_token);
-    } catch { setLoginErr('Credentials zisizo sahihi.'); }
+    } catch { setLoginErr('Jina la mtumiaji au nywila si sahihi.'); }
   };
 
   const logout = () => { localStorage.removeItem('admin_token'); setToken(''); };
 
-  const api = useCallback(async (path: string) => {
-    const { data } = await axios.get(`${ADMIN_API}${path}`, { headers });
-    return data;
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!token) return;
-    setLoading(true);
-    Promise.all([
-      api('/admin/stats'),
-      api('/admin/users?limit=50'),
-      api('/admin/trips?limit=50'),
-      api('/admin/drivers'),
-    ]).then(([s, u, t, d]) => {
-      setStats(s);
-      setUsers(u.users);
-      setTrips(t.trips);
-      setDrivers(d);
-    }).catch((err) => {
-      const status = err?.response?.status;
-      if (status === 401 || status === 403) setToken('');
-      else setApiError(`Hitilafu: ${status ?? 'seva haijibu'} — ${err?.message ?? ''}`);
-    }).finally(() => setLoading(false));
-  }, [token, api]);
-
-  // WebSocket for real-time events
-  useEffect(() => {
-    if (!token) return;
-    const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${wsProto}://${window.location.host}/admin-api/admin/ws?token=${encodeURIComponent(token)}`);
-    wsRef.current = ws;
-    ws.onmessage = (e) => {
-      try {
-        const ev = JSON.parse(e.data as string) as Event;
-        setEvents(prev => [ev, ...prev].slice(0, 100));
-      } catch {}
-    };
-    ws.onclose = () => {};
-    return () => { ws.close(); wsRef.current = null; };
-  }, [token]);
-
   const verifyDriver = async (profileId: number, status: 'VERIFIED' | 'REJECTED') => {
     await axios.patch(`${ADMIN_API}/admin/drivers/${profileId}/verify`, { status }, { headers });
-    setDrivers(prev => prev.map(d => d.profile_id === profileId ? { ...d, verification_status: status } : d));
+    setDrivers(p => p.map(d => d.profile_id === profileId ? { ...d, verification_status: status } : d));
+    toast(`Dereva: ${status}`);
   };
 
   const updateUserStatus = async (userId: number, status: 'active' | 'suspended') => {
     await axios.patch(`${ADMIN_API}/admin/users/${userId}/status`, { status }, { headers });
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, status } : u));
+    setUsers(p => p.map(u => u.id === userId ? { ...u, status } : u));
+    toast(`Status: ${status}`);
+  };
+
+  const deleteUser = async (userId: number, name: string) => {
+    if (!confirm(`Futa kabisa akaunti ya ${name}? Hatua hii haiwezi kurudishwa.`)) return;
+    await axios.delete(`${ADMIN_API}/admin/users/${userId}`, { headers });
+    setUsers(p => p.filter(u => u.id !== userId));
+    toast('Mtumiaji amefutwa.');
   };
 
   const saveEditUser = async () => {
     if (!editUser) return;
     try {
-      await axios.patch(`${ADMIN_API}/admin/users/${editUser.id}/profile`, editForm, { headers });
-      setUsers(prev => prev.map(u => u.id === editUser.id ? { ...u, ...editForm } : u));
-      setEditUser(null);
-      setActionMsg('Taarifa zimehifadhiwa.');
-    } catch { setActionMsg('Hitilafu ya kuhifadhi.'); }
+      await axios.patch(`${ADMIN_API}/admin/users/${editUser.id}/profile`, editUserForm, { headers });
+      await axios.patch(`${ADMIN_API}/admin/users/${editUser.id}/status`, { status: editUserForm.status }, { headers });
+      setUsers(p => p.map(u => u.id === editUser.id ? { ...u, ...editUserForm } : u));
+      setEditUser(null); toast('Imehifadhiwa.');
+    } catch { toast('Hitilafu ya kuhifadhi.'); }
+  };
+
+  const saveEditDriver = async () => {
+    if (!editDriver) return;
+    try {
+      await axios.patch(`${ADMIN_API}/admin/drivers/${editDriver.user_id}/edit`, editDriverForm, { headers });
+      setDrivers(p => p.map(d => d.user_id === editDriver.user_id ? { ...d, ...editDriverForm } : d));
+      setEditDriver(null); toast('Imehifadhiwa.');
+    } catch { toast('Hitilafu ya kuhifadhi.'); }
+  };
+
+  const saveEditTrip = async () => {
+    if (!editTrip) return;
+    try {
+      await axios.patch(`${ADMIN_API}/admin/trips/${editTrip.id}/edit`, editTripForm, { headers });
+      setTrips(p => p.map(t => t.id === editTrip.id ? { ...t, ...editTripForm } : t));
+      setEditTrip(null); toast('Imehifadhiwa.');
+    } catch { toast('Hitilafu ya kuhifadhi.'); }
   };
 
   const doResetPassword = async () => {
-    if (!resetPwdUser) return;
+    if (!resetPwdUser || newPassword.length < 6) { toast('Nywila lazima iwe na herufi 6+'); return; }
     try {
       await axios.post(`${ADMIN_API}/admin/users/${resetPwdUser.id}/reset-password`, { password: newPassword }, { headers });
-      setResetPwdUser(null);
-      setNewPassword('');
-      setActionMsg('Nywila imebadilishwa.');
-    } catch { setActionMsg('Hitilafu ya kubadilisha nywila.'); }
+      setResetPwdUser(null); setNewPassword(''); toast('Nywila imebadilishwa.');
+    } catch { toast('Hitilafu ya kubadilisha nywila.'); }
   };
 
-  const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const saveProfile = () => {
+    localStorage.setItem('admin_display_name', profileName);
+    localStorage.setItem('admin_email', profileEmail);
+    localStorage.setItem('admin_img', profileImg);
+    setProfileSaved(true); setTimeout(() => setProfileSaved(false), 2500);
+  };
 
+  const thStyle: React.CSSProperties = { padding: '0.6rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', fontSize: '0.78rem', background: '#f8fafc', whiteSpace: 'nowrap' };
+  const tdStyle: React.CSSProperties = { padding: '0.55rem 0.875rem', fontSize: '0.8rem', borderBottom: '1px solid #f3f4f6', verticalAlign: 'middle' };
+
+  // ── Login screen ─────────────────────────────────────────────────────────────
   if (!token) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3f4f6' }}>
-        <div style={{ background: '#fff', borderRadius: 16, padding: '2rem', width: 340, boxShadow: '0 4px 24px rgba(0,0,0,0.12)' }}>
-          <h1 style={{ fontWeight: 800, fontSize: '1.4rem', color: '#111', marginBottom: '0.25rem' }}>🛡️ Admin Panel</h1>
-          <p style={{ color: '#6b7280', fontSize: '0.85rem', marginBottom: '1.5rem' }}>BodaBoda Administration</p>
-          {loginErr && <div style={{ color: '#ef4444', fontSize: '0.85rem', marginBottom: '1rem', padding: '0.5rem', background: '#fef2f2', borderRadius: 8 }}>{loginErr}</div>}
-          <form onSubmit={login} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <input placeholder="Username" value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))} style={{ padding: '0.65rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: 8, fontSize: '0.9rem', outline: 'none' }} />
-            <input placeholder="Password" type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} style={{ padding: '0.65rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: 8, fontSize: '0.9rem', outline: 'none' }} />
-            <button type="submit" style={{ padding: '0.7rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer', fontSize: '0.95rem' }}>Ingia</button>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)' }}>
+        <div style={{ background: '#fff', borderRadius: 18, padding: '2.5rem 2rem', width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🛡️</div>
+            <h1 style={{ fontWeight: 800, fontSize: '1.5rem', color: '#0f172a', margin: 0 }}>BodaBoda Admin</h1>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>Ingia kwa akaunti ya msimamizi</p>
+          </div>
+          {loginErr && <div style={{ color: '#dc2626', fontSize: '0.83rem', marginBottom: '1rem', padding: '0.6rem 0.875rem', background: '#fef2f2', borderRadius: 8, border: '1px solid #fca5a5' }}>{loginErr}</div>}
+          <form onSubmit={login} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            <div>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Jina la Mtumiaji</label>
+              <input placeholder="admin" value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))}
+                style={{ width: '100%', padding: '0.7rem 0.875rem', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: '0.9rem', boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Nywila</label>
+              <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))}
+                style={{ width: '100%', padding: '0.7rem 0.875rem', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: '0.9rem', boxSizing: 'border-box', outline: 'none' }} />
+            </div>
+            <button type="submit" style={{ background: 'linear-gradient(135deg,#FF6B00,#ff9100)', color: '#fff', border: 'none', borderRadius: 9, padding: '0.8rem', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', marginTop: '0.25rem' }}>
+              Ingia
+            </button>
           </form>
         </div>
       </div>
     );
   }
 
-  const tabStyle = (t: string) => ({
-    padding: '0.5rem 1.1rem', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
-    background: tab === t ? '#FF6B00' : '#f3f4f6', color: tab === t ? '#fff' : '#374151',
-  });
+  // ── Dashboard ─────────────────────────────────────────────────────────────────
+  const tabs: { id: typeof tab; label: string }[] = [
+    { id: 'stats',   label: '📊 Stats'     },
+    { id: 'users',   label: `👥 Watumiaji (${users.length})` },
+    { id: 'trips',   label: `🏍️ Safari (${trips.length})`   },
+    { id: 'drivers', label: `🏍️ Madereva (${drivers.length})` },
+    { id: 'events',  label: `⚡ Matukio`   },
+    { id: 'profile', label: '👤 Profaili'  },
+  ];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f3f4f6', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: 'system-ui,sans-serif' }}>
       {/* Header */}
-      <div style={{ background: '#1e293b', color: '#fff', padding: '0.875rem 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>🛡️ BodaBoda Admin</div>
-        <button onClick={logout} style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', padding: '0.4rem 0.875rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.82rem' }}>Toka</button>
+      <div style={{ background: '#0f172a', color: '#fff', padding: '0 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 58, position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {profileImg
+            ? <img src={profileImg} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
+            : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#FF6B00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.9rem' }}>{profileName.charAt(0)}</div>
+          }
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>🛡️ BodaBoda Admin</div>
+            <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{profileName}</div>
+          </div>
+        </div>
+        <button onClick={logout} style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, padding: '0.35rem 0.875rem', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>Toka</button>
       </div>
 
-      <div style={{ padding: '1.25rem 1.5rem' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '1.25rem 1rem' }}>
+        {apiError && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{apiError}</div>}
+        {loading && <div style={{ textAlign: 'center', color: '#64748b', padding: '3rem', fontSize: '0.9rem' }}>Inapakia…</div>}
+
         {/* Tab nav */}
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
-          {(['stats','users','trips','drivers','events'] as const).map(t => (
-            <button key={t} style={tabStyle(t)} onClick={() => setTab(t)}>
-              {t === 'stats' ? '📊 Stats' : t === 'users' ? `👥 Users (${users.length})` : t === 'trips' ? `🏍️ Trips (${trips.length})` : t === 'drivers' ? `🏍️ Drivers (${drivers.length})` : `⚡ Events (${events.length})`}
+        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '1.25rem', background: '#fff', padding: '0.5rem', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ padding: '0.45rem 0.875rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: tab === t.id ? '#0f172a' : 'transparent', color: tab === t.id ? '#fff' : '#64748b', transition: 'all 0.15s' }}>
+              {t.label}
             </button>
           ))}
         </div>
 
-        {apiError && <div style={{ color: '#ef4444', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{apiError}</div>}
-        {loading && <div style={{ textAlign: 'center', color: '#6b7280', padding: '3rem' }}>Inapakia…</div>}
-
-        {/* Stats */}
+        {/* ── Stats ── */}
         {!loading && tab === 'stats' && stats && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <StatCard label="Total Users" value={stats.total_users} color="#3b82f6" />
-              <StatCard label="Riders" value={stats.riders} color="#8b5cf6" />
-              <StatCard label="Drivers" value={stats.drivers} color="#f59e0b" />
-              <StatCard label="Total Trips" value={stats.total_trips} color="#6b7280" />
-              <StatCard label="Active Trips" value={stats.active_trips} color="#FF6B00" />
-              <StatCard label="Completed" value={stats.completed_trips} color="#10b981" />
-              <StatCard label="Cancelled" value={stats.cancelled_trips} color="#ef4444" />
-              <StatCard label="Pending Verify" value={stats.pending_verifications} color="#f59e0b" />
+              <StatCard label="Watumiaji Wote" value={stats.total_users} color="#3b82f6" />
+              <StatCard label="Warukaji" value={stats.riders} color="#8b5cf6" />
+              <StatCard label="Madereva" value={stats.drivers} color="#f59e0b" />
+              <StatCard label="Safari Zote" value={stats.total_trips} color="#6b7280" />
+              <StatCard label="Safari Hai" value={stats.active_trips} color="#FF6B00" />
+              <StatCard label="Zilizokamilika" value={stats.completed_trips} color="#10b981" />
+              <StatCard label="Zilizofutwa" value={stats.cancelled_trips} color="#ef4444" />
+              <StatCard label="Subiri Uthibitisho" value={stats.pending_verifications} color="#f59e0b" />
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-              <div style={{ flex: 1, minWidth: 220, background: '#fff', borderRadius: 12, padding: '1rem', boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 4, color: '#374151' }}>👥 Watumiaji</div>
-                <BarChart color="#8b5cf6" data={[
-                  { label: 'Riders', value: stats.riders },
-                  { label: 'Drivers', value: stats.drivers },
-                ]} />
+              <div style={{ flex: 1, minWidth: 200, background: '#fff', borderRadius: 12, padding: '1rem 1.25rem', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#374151', marginBottom: 2 }}>👥 Watumiaji</div>
+                <BarChart color="#8b5cf6" data={[{ label: 'Warukaji', value: stats.riders }, { label: 'Madereva', value: stats.drivers }]} />
               </div>
-              <div style={{ flex: 2, minWidth: 280, background: '#fff', borderRadius: 12, padding: '1rem', boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: 4, color: '#374151' }}>🏍️ Safari</div>
+              <div style={{ flex: 2, minWidth: 280, background: '#fff', borderRadius: 12, padding: '1rem 1.25rem', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#374151', marginBottom: 2 }}>🏍️ Safari</div>
                 <BarChart color="#FF6B00" data={[
                   { label: 'Zote', value: stats.total_trips },
-                  { label: 'Amilifu', value: stats.active_trips },
+                  { label: 'Hai', value: stats.active_trips },
                   { label: 'Zim.', value: stats.completed_trips },
-                  { label: 'Batil.', value: stats.cancelled_trips },
+                  { label: 'Bat.', value: stats.cancelled_trips },
+                ]} />
+              </div>
+              <div style={{ flex: 1, minWidth: 200, background: '#fff', borderRadius: 12, padding: '1rem 1.25rem', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#374151', marginBottom: 2 }}>✅ Uthibitisho</div>
+                <BarChart color="#10b981" data={[
+                  { label: 'Subiri', value: stats.pending_verifications },
+                  { label: 'Madereva', value: stats.drivers },
                 ]} />
               </div>
             </div>
           </div>
         )}
 
-        {/* Users */}
+        {/* ── Users ── */}
         {!loading && tab === 'users' && (
           <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
-            <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => exportCsv(users as unknown as Record<string,unknown>[], 'users.csv')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>📥 Export CSV</button>
+            <div style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>Watumiaji ({users.length})</span>
+              <ExportBar rows={users as unknown as Record<string,unknown>[]} name="users" />
             </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-              <thead style={{ background: '#f8fafc' }}>
-                <tr>{['ID','Jina','Email','Simu','Role','Status','Tarehe','Hatua'].map(h => <th key={h} style={{ padding: '0.65rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {users.map(u => (
-                  <tr key={u.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '0.6rem 0.875rem', color: '#6b7280' }}>{u.id}</td>
-                    <td style={{ padding: '0.6rem 0.875rem', fontWeight: 600 }}>{u.full_name}</td>
-                    <td style={{ padding: '0.6rem 0.875rem', color: '#6b7280' }}>{u.email}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>{u.phone}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}><span style={{ background: u.role === 'DRIVER' ? '#fef3c7' : '#ede9fe', color: u.role === 'DRIVER' ? '#92400e' : '#5b21b6', padding: '0.2rem 0.5rem', borderRadius: 99, fontWeight: 600 }}>{u.role}</span></td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}><span style={{ color: u.status === 'active' ? '#10b981' : '#ef4444', fontWeight: 600 }}>{u.status}</span></td>
-                    <td style={{ padding: '0.6rem 0.875rem', color: '#6b7280' }}>{fmtDate(u.created_at)}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>
-                      {u.status === 'active'
-                        ? <button onClick={() => updateUserStatus(u.id, 'suspended')} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', padding: '0.25rem 0.6rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>Suspend</button>
-                        : <button onClick={() => updateUserStatus(u.id, 'active')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.25rem 0.6rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>Activate</button>
-                      }
-                      <button onClick={() => { setEditUser(u); setEditForm({ full_name: u.full_name, email: u.email, phone: u.phone }); }}
-                        style={{ marginLeft: 4, padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                        ✏️ Edit
-                      </button>
-                      <button onClick={() => setResetPwdUser(u)}
-                        style={{ marginLeft: 4, padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: '#6b7280', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
-                        🔑 Nywila
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Trips */}
-        {!loading && tab === 'trips' && (
-          <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
-            <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => exportCsv(trips as unknown as Record<string,unknown>[], 'trips.csv')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>📥 Export CSV</button>
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-              <thead style={{ background: '#f8fafc' }}>
-                <tr>{['ID','Jina','Pickup','Destination','Status','Rider','Tarehe'].map(h => <th key={h} style={{ padding: '0.65rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {trips.map(t => (
-                  <tr key={t.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '0.6rem 0.875rem', color: '#6b7280' }}>{t.id}</td>
-                    <td style={{ padding: '0.6rem 0.875rem', fontWeight: 600 }}>{t.trip_name ?? `#${t.id}`}</td>
-                    <td style={{ padding: '0.6rem 0.875rem', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.pickup_address}</td>
-                    <td style={{ padding: '0.6rem 0.875rem', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.destination_address}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}><span style={{ background: t.status === 'COMPLETED' ? '#f0fdf4' : t.status === 'CANCELLED' ? '#fef2f2' : '#fff7ed', color: t.status === 'COMPLETED' ? '#10b981' : t.status === 'CANCELLED' ? '#ef4444' : '#FF6B00', padding: '0.2rem 0.5rem', borderRadius: 99, fontSize: '0.75rem', fontWeight: 600 }}>{t.status}</span></td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>{t.rider_name}</td>
-                    <td style={{ padding: '0.6rem 0.875rem', color: '#6b7280' }}>{fmtDate(t.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Drivers */}
-        {!loading && tab === 'drivers' && (
-          <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
-            <div style={{ padding: '0.6rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => exportCsv(drivers as unknown as Record<string,unknown>[], 'drivers.csv')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}>📥 Export CSV</button>
-            </div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-              <thead style={{ background: '#f8fafc' }}>
-                <tr>{['Jina','Simu','Gari','Sahani','Verification','Status','Rating','Trips','Hatua'].map(h => <th key={h} style={{ padding: '0.65rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {drivers.map(d => (
-                  <tr key={d.user_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '0.6rem 0.875rem', fontWeight: 600 }}>{d.full_name}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>{d.phone}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>{d.vehicle_model}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>{d.plate_number}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>
-                      <span style={{ background: d.verification_status === 'VERIFIED' ? '#f0fdf4' : d.verification_status === 'REJECTED' ? '#fef2f2' : '#fff7ed', color: d.verification_status === 'VERIFIED' ? '#10b981' : d.verification_status === 'REJECTED' ? '#ef4444' : '#f59e0b', padding: '0.2rem 0.5rem', borderRadius: 99, fontSize: '0.75rem', fontWeight: 600 }}>{d.verification_status}</span>
-                    </td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>{d.driver_status ?? '—'}</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>{d.rating?.toFixed(1) ?? '—'} ⭐</td>
-                    <td style={{ padding: '0.6rem 0.875rem' }}>{d.total_trips ?? 0}</td>
-                    <td style={{ padding: '0.6rem 0.875rem', display: 'flex', gap: '0.35rem' }}>
-                      {d.verification_status !== 'VERIFIED' && (
-                        <button onClick={() => verifyDriver(d.profile_id, 'VERIFIED')} style={{ background: '#f0fdf4', color: '#10b981', border: 'none', padding: '0.25rem 0.5rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>✓ Verify</button>
-                      )}
-                      {d.verification_status !== 'REJECTED' && (
-                        <button onClick={() => verifyDriver(d.profile_id, 'REJECTED')} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', padding: '0.25rem 0.5rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>✕ Reject</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Events */}
-        {!loading && tab === 'events' && (
-          <div>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                <thead>
-                  <tr style={{ background: '#1e293b', color: '#fff' }}>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Wakati</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Topic</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Event Type</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Trip ID</th>
-                    <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left' }}>Maelezo</th>
-                  </tr>
-                </thead>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr>{['#','Jina','Email','Simu','Role','Status','Tarehe','Hatua'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {events.length === 0 && (
-                    <tr><td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Hakuna events bado — subiri ujumbe wa MQTT…</td></tr>
-                  )}
-                  {events.map((ev, i) => {
-                    const payload = ev.payload as Record<string, unknown> | undefined;
-                    const tripId = payload?.trip_id as number | undefined;
-                    const details = payload ? Object.entries(payload)
-                      .filter(([k]) => !['trip_id'].includes(k))
-                      .map(([k, v]) => `${k}: ${v}`)
-                      .join(' · ') : '';
-                    return (
-                      <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
-                        <td style={{ padding: '0.5rem 0.75rem', color: '#6b7280', whiteSpace: 'nowrap' }}>
-                          {new Date(ev.timestamp).toLocaleTimeString()}
-                        </td>
-                        <td style={{ padding: '0.5rem 0.75rem' }}>
-                          <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4, fontSize: '0.78rem' }}>{ev.topic}</code>
-                        </td>
-                        <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600, color: '#FF6B00' }}>{ev.event_type ?? '—'}</td>
-                        <td style={{ padding: '0.5rem 0.75rem', color: '#3b82f6' }}>{tripId ?? '—'}</td>
-                        <td style={{ padding: '0.5rem 0.75rem', color: '#374151', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{details}</td>
-                      </tr>
-                    );
-                  })}
+                  {users.map(u => (
+                    <tr key={u.id} style={{ background: '#fff' }}>
+                      <td style={{ ...tdStyle, color: '#9ca3af' }}>{u.id}</td>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{u.full_name}</td>
+                      <td style={{ ...tdStyle, color: '#64748b' }}>{u.email}</td>
+                      <td style={tdStyle}>{u.phone}</td>
+                      <td style={tdStyle}><Badge text={u.role} color="#8b5cf6" /></td>
+                      <td style={tdStyle}><Badge text={u.status} color="#10b981" /></td>
+                      <td style={{ ...tdStyle, color: '#9ca3af' }}>{fmtDate(u.created_at)}</td>
+                      <td style={{ ...tdStyle }}>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          <button onClick={() => { setEditUser(u); setEditUserForm({ full_name: u.full_name, email: u.email, phone: u.phone ?? '', role: u.role, status: u.status }); }}
+                            style={{ background: '#eff6ff', color: '#2563eb', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✏️ Edit</button>
+                          <button onClick={() => { setResetPwdUser(u); setNewPassword(''); }}
+                            style={{ background: '#f5f3ff', color: '#7c3aed', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>🔑</button>
+                          {u.status === 'active'
+                            ? <button onClick={() => updateUserStatus(u.id, 'suspended')} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>⛔</button>
+                            : <button onClick={() => updateUserStatus(u.id, 'active')} style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✅</button>}
+                          <button onClick={() => deleteUser(u.id, u.full_name)}
+                            style={{ background: '#fef2f2', color: '#dc2626', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>🗑️</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           </div>
         )}
+
+        {/* ── Trips ── */}
+        {!loading && tab === 'trips' && (
+          <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
+            <div style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>Safari ({trips.length})</span>
+              <ExportBar rows={trips as unknown as Record<string,unknown>[]} name="trips" />
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr>{['#','Jina','Pickup','Destination','Status','Rider','Tarehe','Hatua'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {trips.map(t => (
+                    <tr key={t.id}>
+                      <td style={{ ...tdStyle, color: '#9ca3af' }}>{t.id}</td>
+                      <td style={{ ...tdStyle, fontWeight: 600, maxWidth: 160 }}>{t.trip_name ?? `#${t.id}`}</td>
+                      <td style={{ ...tdStyle, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.pickup_address}</td>
+                      <td style={{ ...tdStyle, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.destination_address}</td>
+                      <td style={tdStyle}><Badge text={t.status} color="#FF6B00" /></td>
+                      <td style={tdStyle}>{t.rider_name}</td>
+                      <td style={{ ...tdStyle, color: '#9ca3af' }}>{fmtDate(t.created_at)}</td>
+                      <td style={tdStyle}>
+                        <button onClick={() => { setEditTrip(t); setEditTripForm({ trip_name: t.trip_name ?? '', status: t.status, pickup_address: t.pickup_address, destination_address: t.destination_address }); }}
+                          style={{ background: '#eff6ff', color: '#2563eb', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✏️ Edit</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Drivers ── */}
+        {!loading && tab === 'drivers' && (
+          <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
+            <div style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>Madereva ({drivers.length})</span>
+              <ExportBar rows={drivers as unknown as Record<string,unknown>[]} name="drivers" />
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr>{['Jina','Simu','Bodaboda','Nambari','Leseni','Uthibitisho','Status','Rating','Hatua'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {drivers.map(d => (
+                    <tr key={d.user_id}>
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{d.full_name}</td>
+                      <td style={tdStyle}>{d.phone}</td>
+                      <td style={tdStyle}>{d.vehicle_model}</td>
+                      <td style={tdStyle}>{d.plate_number}</td>
+                      <td style={{ ...tdStyle, color: '#64748b', fontSize: '0.75rem' }}>{d.license_number}</td>
+                      <td style={tdStyle}><Badge text={d.verification_status} color="#10b981" /></td>
+                      <td style={tdStyle}>{d.driver_status ?? '—'}</td>
+                      <td style={tdStyle}>{d.rating?.toFixed(1) ?? '—'} ⭐</td>
+                      <td style={{ ...tdStyle }}>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          <button onClick={() => { setEditDriver(d); setEditDriverForm({ full_name: d.full_name, email: d.email ?? '', phone: d.phone ?? '', vehicle_model: d.vehicle_model ?? '', plate_number: d.plate_number ?? '', license_number: d.license_number ?? '', verification_status: d.verification_status, status: d.driver_status ?? '' }); }}
+                            style={{ background: '#eff6ff', color: '#2563eb', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✏️ Edit</button>
+                          {d.verification_status !== 'VERIFIED' && <button onClick={() => verifyDriver(d.profile_id, 'VERIFIED')} style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', padding: '0.22rem 0.5rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✓</button>}
+                          {d.verification_status !== 'REJECTED' && <button onClick={() => verifyDriver(d.profile_id, 'REJECTED')} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', padding: '0.22rem 0.5rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✕</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Events ── */}
+        {!loading && tab === 'events' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', background: '#fff', padding: '0.5rem', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', width: 'fit-content' }}>
+              <button onClick={() => setEvtSubTab('live')} style={{ padding: '0.4rem 1rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: evtSubTab === 'live' ? '#0f172a' : 'transparent', color: evtSubTab === 'live' ? '#fff' : '#64748b' }}>
+                🔴 Live ({liveEvents.length})
+              </button>
+              <button onClick={() => setEvtSubTab('history')} style={{ padding: '0.4rem 1rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: evtSubTab === 'history' ? '#0f172a' : 'transparent', color: evtSubTab === 'history' ? '#fff' : '#64748b' }}>
+                📋 Historia ({histEvents.length})
+              </button>
+            </div>
+
+            {evtSubTab === 'live' && (
+              <div style={{ background: '#0f172a', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.15)' }}>
+                <div style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1e293b' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#e2e8f0' }}>⚡ Matukio ya MQTT (Real-time)</span>
+                  <button onClick={() => setLiveEvents([])} style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '0.25rem 0.6rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem' }}>Futa Yote</button>
+                </div>
+                {liveEvents.length === 0
+                  ? <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>Hakuna matukio bado — inangoja MQTT…</div>
+                  : <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+                    {liveEvents.map((ev, i) => {
+                      const payload = ev.payload as Record<string,unknown> | undefined;
+                      return (
+                        <div key={i} style={{ padding: '0.5rem 1rem', borderBottom: '1px solid #1e293b', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', fontSize: '0.78rem' }}>
+                          <div style={{ color: '#64748b', whiteSpace: 'nowrap', paddingTop: 1 }}>{fmtTime(ev.timestamp)}</div>
+                          <code style={{ background: '#1e293b', color: '#94a3b8', padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>{ev.topic}</code>
+                          <span style={{ fontWeight: 700, color: '#fb923c' }}>{ev.event_type ?? '—'}</span>
+                          <span style={{ color: '#64748b', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {payload ? Object.entries(payload).filter(([k]) => !['lat','lng'].includes(k)).map(([k,v]) => `${k}:${v}`).join(' · ') : ''}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                }
+              </div>
+            )}
+
+            {evtSubTab === 'history' && (
+              <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.07)' }}>
+                <div style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>📋 Historia ya Matukio ya Safari</span>
+                  <ExportBar rows={histEvents as unknown as Record<string,unknown>[]} name="events_history" />
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead><tr>{['Wakati','Trip #','Jina la Safari','Tukio','Alibadilisha','Rider'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                    <tbody>
+                      {histEvents.length === 0
+                        ? <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Hakuna historia bado.</td></tr>
+                        : histEvents.map(ev => (
+                          <tr key={ev.id}>
+                            <td style={{ ...tdStyle, color: '#9ca3af', whiteSpace: 'nowrap' }}>{fmtDate(ev.timestamp)} {fmtTime(ev.timestamp)}</td>
+                            <td style={{ ...tdStyle, color: '#3b82f6', fontWeight: 700 }}>#{ev.trip_id}</td>
+                            <td style={{ ...tdStyle, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.trip_name}</td>
+                            <td style={tdStyle}><Badge text={ev.event_type} color="#FF6B00" /></td>
+                            <td style={{ ...tdStyle, color: '#64748b' }}>{ev.changed_by}</td>
+                            <td style={tdStyle}>{ev.rider_name}</td>
+                          </tr>
+                        ))
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Admin Profile ── */}
+        {tab === 'profile' && (
+          <div style={{ maxWidth: 500 }}>
+            <div style={{ background: '#fff', borderRadius: 14, padding: '1.5rem', boxShadow: '0 1px 8px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #f3f4f6' }}>
+                <div style={{ width: 64, height: 64, borderRadius: '50%', background: profileImg ? 'transparent' : '#FF6B00', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, border: '2px solid #e5e7eb' }}>
+                  {profileImg ? <img src={profileImg} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: '#fff', fontWeight: 800, fontSize: '1.5rem' }}>{profileName.charAt(0)}</span>}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>{profileName}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Msimamizi wa BodaBoda</div>
+                </div>
+              </div>
+
+              <Input label="Jina la Kuonyesha" value={profileName} onChange={setProfileName} placeholder="Admin" />
+              <Input label="Barua Pepe" value={profileEmail} onChange={setProfileEmail} type="email" placeholder="admin@bodaboda.tz" />
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>Picha (faili)</label>
+                <input type="file" accept="image/*" style={{ fontSize: '0.82rem' }}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => setProfileImg(ev.target?.result as string);
+                    reader.readAsDataURL(file);
+                  }}
+                />
+                {profileImg && <img src={profileImg} alt="preview" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', marginTop: 6, border: '2px solid #e5e7eb' }} onError={e => (e.currentTarget.style.display = 'none')} />}
+              </div>
+
+              {profileSaved && <div style={{ color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '0.5rem 0.875rem', fontSize: '0.83rem' }}>✅ Imehifadhiwa!</div>}
+
+              <button onClick={saveProfile} style={{ background: '#0f172a', color: '#fff', border: 'none', borderRadius: 9, padding: '0.7rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+                Hifadhi Taarifa
+              </button>
+
+              <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '1rem' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>Taarifa za Mfumo</div>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div>Watumiaji: <strong>{stats?.total_users ?? '—'}</strong></div>
+                  <div>Madereva: <strong>{stats?.drivers ?? '—'}</strong></div>
+                  <div>Safari zote: <strong>{stats?.total_trips ?? '—'}</strong></div>
+                  <div>Zilizokamilika: <strong>{stats?.completed_trips ?? '—'}</strong></div>
+                </div>
+              </div>
+
+              <button onClick={logout} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 9, padding: '0.6rem', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>
+                🚪 Toka
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Edit User Modal */}
       {editUser && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: '1.5rem', width: 340, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>✏️ Hariri Taarifa — {editUser.full_name}</h3>
-            <input placeholder="Jina kamili" value={editForm.full_name} onChange={e => setEditForm(p => ({ ...p, full_name: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: '0.85rem' }} />
-            <input placeholder="Email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: '0.85rem' }} />
-            <input placeholder="Simu" value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} style={{ padding: '0.6rem', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: '0.85rem' }} />
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={saveEditUser} style={{ flex: 1, padding: '0.6rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
-              <button onClick={() => setEditUser(null)} style={{ flex: 1, padding: '0.6rem', background: '#f3f4f6', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Funga</button>
-            </div>
+        <Modal title={`✏️ Hariri — ${editUser.full_name}`} onClose={() => setEditUser(null)}>
+          <Input label="Jina Kamili" value={editUserForm.full_name} onChange={v => setEditUserForm(p => ({ ...p, full_name: v }))} />
+          <Input label="Barua Pepe" value={editUserForm.email} onChange={v => setEditUserForm(p => ({ ...p, email: v }))} type="email" />
+          <Input label="Nambari ya Simu" value={editUserForm.phone} onChange={v => setEditUserForm(p => ({ ...p, phone: v }))} />
+          <Select label="Role" value={editUserForm.role} onChange={v => setEditUserForm(p => ({ ...p, role: v }))} options={[{ value: 'RIDER', label: 'RIDER' }, { value: 'DRIVER', label: 'DRIVER' }]} />
+          <Select label="Status" value={editUserForm.status} onChange={v => setEditUserForm(p => ({ ...p, status: v }))} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={saveEditUser} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
+            <button onClick={() => setEditUser(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
           </div>
-        </div>
+        </Modal>
       )}
 
+      {/* Edit Driver Modal */}
+      {editDriver && (
+        <Modal title={`✏️ Hariri Dereva — ${editDriver.full_name}`} onClose={() => setEditDriver(null)}>
+          <Input label="Jina Kamili" value={editDriverForm.full_name} onChange={v => setEditDriverForm(p => ({ ...p, full_name: v }))} />
+          <Input label="Barua Pepe" value={editDriverForm.email} onChange={v => setEditDriverForm(p => ({ ...p, email: v }))} type="email" />
+          <Input label="Nambari ya Simu" value={editDriverForm.phone} onChange={v => setEditDriverForm(p => ({ ...p, phone: v }))} />
+          <Input label="Aina ya Bodaboda" value={editDriverForm.vehicle_model} onChange={v => setEditDriverForm(p => ({ ...p, vehicle_model: v }))} placeholder="Bajaj Boxer 150" />
+          <Input label="Nambari ya Sahani" value={editDriverForm.plate_number} onChange={v => setEditDriverForm(p => ({ ...p, plate_number: v }))} placeholder="T 123 ABC" />
+          <Input label="Nambari ya Leseni" value={editDriverForm.license_number} onChange={v => setEditDriverForm(p => ({ ...p, license_number: v }))} />
+          <Select label="Uthibitisho" value={editDriverForm.verification_status} onChange={v => setEditDriverForm(p => ({ ...p, verification_status: v }))} options={[{ value: 'PENDING', label: 'PENDING' }, { value: 'VERIFIED', label: 'VERIFIED' }, { value: 'REJECTED', label: 'REJECTED' }]} />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={saveEditDriver} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
+            <button onClick={() => setEditDriver(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Edit Trip Modal */}
+      {editTrip && (
+        <Modal title={`✏️ Hariri Safari #${editTrip.id}`} onClose={() => setEditTrip(null)}>
+          <Input label="Jina la Safari" value={editTripForm.trip_name} onChange={v => setEditTripForm(p => ({ ...p, trip_name: v }))} />
+          <Select label="Status" value={editTripForm.status} onChange={v => setEditTripForm(p => ({ ...p, status: v }))} options={['SEARCHING_DRIVER','DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS','COMPLETED','CANCELLED'].map(s => ({ value: s, label: s }))} />
+          <Input label="Mahali pa Kuanzia" value={editTripForm.pickup_address} onChange={v => setEditTripForm(p => ({ ...p, pickup_address: v }))} />
+          <Input label="Mahali pa Kwenda" value={editTripForm.destination_address} onChange={v => setEditTripForm(p => ({ ...p, destination_address: v }))} />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={saveEditTrip} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
+            <button onClick={() => setEditTrip(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Reset Password Modal */}
       {resetPwdUser && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: '1.5rem', width: 320, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>🔑 Weka Nywila Mpya — {resetPwdUser.full_name}</h3>
-            <input placeholder="Nywila mpya (min 6)" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} style={{ padding: '0.6rem', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: '0.85rem' }} />
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={doResetPassword} style={{ flex: 1, padding: '0.6rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>Badilisha</button>
-              <button onClick={() => setResetPwdUser(null)} style={{ flex: 1, padding: '0.6rem', background: '#f3f4f6', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Funga</button>
-            </div>
+        <Modal title={`🔑 Nywila Mpya — ${resetPwdUser.full_name}`} onClose={() => setResetPwdUser(null)}>
+          <Input label="Nywila Mpya (min 6)" value={newPassword} onChange={setNewPassword} type="password" placeholder="••••••••" />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={doResetPassword} style={{ flex: 1, padding: '0.65rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Badilisha</button>
+            <button onClick={() => setResetPwdUser(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
           </div>
-        </div>
+        </Modal>
       )}
 
+      {/* Toast */}
       {actionMsg && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, background: '#1e293b', color: '#fff', padding: '0.75rem 1.25rem', borderRadius: 8, fontSize: '0.85rem', zIndex: 2000 }}
-          onClick={() => setActionMsg('')}>
+        <div onClick={() => setActionMsg('')} style={{ position: 'fixed', bottom: 24, right: 24, background: '#0f172a', color: '#fff', padding: '0.75rem 1.25rem', borderRadius: 10, fontSize: '0.85rem', zIndex: 2000, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
           {actionMsg}
         </div>
       )}

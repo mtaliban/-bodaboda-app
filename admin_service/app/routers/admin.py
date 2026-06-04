@@ -168,6 +168,61 @@ async def reset_user_password(user_id: int, body: dict, db: AsyncSession = Depen
     return {"ok": True}
 
 
+# ── Edit Driver Profile ───────────────────────────────────────────────────────
+@router.patch("/drivers/{user_id}/edit", dependencies=[Depends(verify_admin_token)])
+async def edit_driver(user_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    user_fields = {k: v for k, v in body.items() if k in ("full_name", "email", "phone", "role", "status")}
+    driver_fields = {k: v for k, v in body.items() if k in ("license_number", "vehicle_model", "plate_number", "verification_status")}
+    if user_fields:
+        set_u = ", ".join(f"{k} = :{k}" for k in user_fields)
+        user_fields["uid"] = user_id
+        await db.execute(text(f"UPDATE users SET {set_u} WHERE id = :uid"), user_fields)
+    if driver_fields:
+        set_d = ", ".join(f"{k} = :{k}" for k in driver_fields)
+        driver_fields["uid"] = user_id
+        await db.execute(text(f"UPDATE driver_profiles SET {set_d} WHERE user_id = :uid"), driver_fields)
+    await db.commit()
+    return {"ok": True}
+
+
+# ── Edit Trip ─────────────────────────────────────────────────────────────────
+@router.patch("/trips/{trip_id}/edit", dependencies=[Depends(verify_admin_token)])
+async def edit_trip(trip_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    fields = {k: v for k, v in body.items() if k in ("status", "pickup_address", "destination_address", "trip_name")}
+    if not fields:
+        raise HTTPException(status_code=400, detail="No valid fields")
+    set_clause = ", ".join(f"{k} = :{k}" for k in fields)
+    fields["tid"] = trip_id
+    await db.execute(text(f"UPDATE trips SET {set_clause} WHERE id = :tid"), fields)
+    await db.commit()
+    return {"ok": True}
+
+
+# ── Delete User ───────────────────────────────────────────────────────────────
+@router.delete("/users/{user_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM users WHERE id = :id"), {"id": user_id})
+    await db.commit()
+    return {"ok": True}
+
+
+# ── Historical Events (trip status history) ───────────────────────────────────
+@router.get("/events/history", dependencies=[Depends(verify_admin_token)])
+async def get_events_history(limit: int = 200, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT tsh.id, tsh.trip_id, tsh.status AS event_type, tsh.changed_by,
+               tsh.created_at AS timestamp,
+               t.trip_name, t.pickup_address, t.destination_address,
+               u.full_name AS rider_name
+        FROM trip_status_history tsh
+        JOIN trips t ON t.id = tsh.trip_id
+        JOIN users u ON u.id = t.rider_id
+        ORDER BY tsh.created_at DESC
+        LIMIT :limit
+    """), {"limit": limit})
+    return [dict(r) for r in result.mappings()]
+
+
 # ── WebSocket — real-time event feed ─────────────────────────────────────────
 @router.websocket("/ws")
 async def admin_ws(websocket: WebSocket):

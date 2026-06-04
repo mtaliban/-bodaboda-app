@@ -1400,8 +1400,22 @@ function EditAccountTab({ user, updateUser, setActiveTab }: { user: User; update
               </div>
             </div>
             <div className="form-group">
-              <label htmlFor="ea-profile_image_url">Profile Image URL</label>
-              <input id="ea-profile_image_url" name="profile_image_url" type="url" value={form.profile_image_url} onChange={handleChange} placeholder="https://example.com/photo.jpg" />
+              <label>Profile Picture</label>
+              <input type="file" accept="image/*" style={{ fontSize: '0.85rem' }}
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => setForm(p => ({ ...p, profile_image_url: ev.target?.result as string }));
+                  reader.readAsDataURL(file);
+                }}
+              />
+              {form.profile_image_url && (
+                <img src={form.profile_image_url} alt="preview"
+                  style={{ marginTop: '0.5rem', width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #e5e7eb' }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              )}
             </div>
             <div className="edit-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setActiveTab('profile')}>Cancel</button>
@@ -2528,15 +2542,16 @@ const IconList = () => (
 type WalletTx = { id: number; type: string; amount: number; balance_after: number; trip_id?: number; description: string; created_at: string };
 type WalletData = { balance: number; transactions: WalletTx[] };
 
+const QUICK_AMOUNTS = [1000, 5000, 10000, 20000];
+
 function WalletTab() {
-  const [data, setData]           = useState<WalletData | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [loadErr, setLoadErr]     = useState('');
-  const [topupAmount, setTopupAmount] = useState('');
-  const [topupLoading, setTopupLoading] = useState(false);
-  const [topupMsg, setTopupMsg]   = useState('');
-  const [topupErr, setTopupErr]   = useState('');
-  const [showTopup, setShowTopup] = useState(false);
+  const [data, setData]               = useState<WalletData | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [loadErr, setLoadErr]         = useState('');
+  const [amount, setAmount]           = useState('');
+  const [saving, setSaving]           = useState(false);
+  const [msg, setMsg]                 = useState('');
+  const [topupErr, setTopupErr]       = useState('');
 
   const load = async () => {
     setLoading(true); setLoadErr('');
@@ -2554,90 +2569,86 @@ function WalletTab() {
 
   const doTopup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setTopupErr(''); setTopupMsg(''); setTopupLoading(true);
+    const val = parseFloat(amount);
+    if (!val || val < 500) { setTopupErr('Kiwango cha chini ni TSh 500'); return; }
+    setTopupErr(''); setMsg(''); setSaving(true);
     try {
-      const amount = parseFloat(topupAmount);
-      if (!amount || amount < 500) { setTopupErr('Kiwango cha chini ni TSh 500'); setTopupLoading(false); return; }
-      const { data: d } = await api.post('/wallet/topup', { amount });
-      setTopupMsg(d.message ?? 'Pesa zimeongezwa!');
-      setTopupAmount('');
-      setShowTopup(false);
+      const { data: d } = await api.post<{ balance: number; message: string }>('/wallet/topup', { amount: val });
+      setMsg(d.message ?? 'Pesa zimeongezwa!');
+      setAmount('');
       await load();
-    } catch (err) { setTopupErr(extractApiError(err)); }
-    setTopupLoading(false);
+    } catch (err) {
+      setTopupErr(extractApiError(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const balance = data?.balance ?? 0;
+  const txns = data?.transactions ?? [];
+
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <div style={{ textAlign: 'center', background: 'linear-gradient(135deg,#FF6B00,#ff9100)', borderRadius: 16, padding: '1.5rem', color: '#fff' }}>
-        <div style={{ fontSize: '0.85rem', opacity: 0.85, marginBottom: 4 }}>Salio la Mkoba Wako</div>
-        <div style={{ fontSize: '2.4rem', fontWeight: 800, letterSpacing: '-1px' }}>
-          {loading ? '…' : `TSh ${(data?.balance ?? 0).toLocaleString()}`}
+    <div style={{ maxWidth: 440, margin: '0 auto', padding: '1rem 0.75rem' }}>
+
+      {/* Balance */}
+      <div style={{ background: 'linear-gradient(135deg,#FF6B00,#ff9100)', borderRadius: 14, padding: '1.25rem 1.5rem', color: '#fff', marginBottom: '1rem' }}>
+        <div style={{ fontSize: '0.78rem', opacity: 0.85 }}>Salio la Mkoba</div>
+        <div style={{ fontSize: '2rem', fontWeight: 800, margin: '0.2rem 0 0' }}>
+          {loading ? '…' : `TSh ${balance.toLocaleString()}`}
         </div>
-        <button
-          onClick={() => setShowTopup(s => !s)}
-          style={{ marginTop: '1rem', background: '#fff', color: '#FF6B00', border: 'none', borderRadius: 99, padding: '0.5rem 1.5rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
-          + Ongeza Pesa
-        </button>
       </div>
 
-      {loadErr && <Alert type="error" message={`Hitilafu ya mkoba: ${loadErr}`} />}
-      {topupMsg && <Alert type="success" message={topupMsg} />}
+      {loadErr && <Alert type="error" message={loadErr} />}
 
-      {showTopup && (
-        <form onSubmit={doTopup} style={{ background: '#fff', borderRadius: 12, padding: '1rem', boxShadow: '0 2px 12px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>Ongeza Pesa Mkononi</div>
-          {topupErr && <Alert type="error" message={topupErr} />}
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {[1000, 5000, 10000, 20000].map(amt => (
-              <button key={amt} type="button"
-                onClick={() => setTopupAmount(String(amt))}
-                style={{ flex: 1, padding: '0.4rem', background: topupAmount === String(amt) ? '#FF6B00' : '#f3f4f6', color: topupAmount === String(amt) ? '#fff' : '#374151', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}>
-                {(amt/1000).toFixed(0)}k
-              </button>
-            ))}
-          </div>
+      {/* Add money form */}
+      <form onSubmit={doTopup} style={{ marginBottom: '1.25rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.88rem', marginBottom: '0.5rem', color: '#374151' }}>Ongeza Pesa</div>
+        {msg       && <Alert type="success" message={msg} />}
+        {topupErr  && <Alert type="error"   message={topupErr} />}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '0.4rem', marginBottom: '0.5rem' }}>
+          {QUICK_AMOUNTS.map(a => (
+            <button key={a} type="button"
+              onClick={() => setAmount(String(a))}
+              style={{ padding: '0.45rem 0', background: amount === String(a) ? '#FF6B00' : '#f3f4f6', color: amount === String(a) ? '#fff' : '#374151', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}>
+              {a >= 1000 ? `${a/1000}k` : a}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
           <input
             type="number" min="500" max="500000" step="100"
-            placeholder="Au weka kiasi (TSh)"
-            value={topupAmount}
-            onChange={e => setTopupAmount(e.target.value)}
-            style={{ padding: '0.65rem', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: '0.9rem' }}
+            placeholder="Kiasi (TSh)"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            style={{ flex: 1, padding: '0.6rem 0.75rem', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: '0.88rem' }}
           />
-          <button type="submit" disabled={topupLoading} className="btn btn-primary">
-            {topupLoading ? <><span className="btn-spinner" /> Inaongeza…</> : 'Thibitisha'}
+          <button type="submit" disabled={saving} className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
+            {saving ? <><span className="btn-spinner" /> Inaongeza…</> : '+ Weka'}
           </button>
-        </form>
-      )}
+        </div>
+      </form>
 
-      <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>
-        <div style={{ padding: '0.75rem 1rem', fontWeight: 700, fontSize: '0.88rem', borderBottom: '1px solid #f3f4f6' }}>📋 Historia ya Malipo</div>
-        {loading ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Inapakia…</div>
-        ) : !data?.transactions?.length ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>Hakuna shughuli bado.</div>
-        ) : (
-          <div>
-            {(data?.transactions ?? []).map(t => (
-              <div key={t.id} style={{ display: 'flex', alignItems: 'center', padding: '0.65rem 1rem', borderBottom: '1px solid #f9fafb', gap: '0.75rem' }}>
-                <div style={{ width: 34, height: 34, borderRadius: '50%', background: t.type === 'CREDIT' ? '#f0fdf4' : '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
-                  {t.type === 'CREDIT' ? '⬆️' : '⬇️'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
-                </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem', color: t.type === 'CREDIT' ? '#10b981' : '#ef4444' }}>
-                    {t.type === 'CREDIT' ? '+' : '-'}TSh {t.amount.toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Bal: {t.balance_after.toLocaleString()}</div>
-                </div>
-              </div>
-            ))}
+      {/* Transaction history */}
+      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.5rem' }}>Historia ya Malipo</div>
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '1.5rem 0', fontSize: '0.85rem' }}>Inapakia…</div>
+      ) : txns.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '1.5rem 0', fontSize: '0.85rem' }}>Hakuna shughuli bado.</div>
+      ) : txns.map(t => (
+        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 0', borderBottom: '1px solid #f3f4f6' }}>
+          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{t.type === 'CREDIT' ? '⬆️' : '⬇️'}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.description}</div>
+            <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
           </div>
-        )}
-      </div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: t.type === 'CREDIT' ? '#16a34a' : '#dc2626' }}>
+              {t.type === 'CREDIT' ? '+' : '-'}TSh {t.amount.toLocaleString()}
+            </div>
+            <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Bal: {t.balance_after.toLocaleString()}</div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
