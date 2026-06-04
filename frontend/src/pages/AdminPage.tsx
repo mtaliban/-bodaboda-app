@@ -33,6 +33,7 @@ export default function AdminPage() {
   const [tab,      setTab]     = useState<'stats'|'users'|'trips'|'drivers'|'events'>('stats');
   const [events,   setEvents]  = useState<Event[]>([]);
   const [loading,  setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
 
   const headers = { Authorization: `Bearer ${token}` };
@@ -66,7 +67,11 @@ export default function AdminPage() {
       setUsers(u.users);
       setTrips(t.trips);
       setDrivers(d);
-    }).catch(() => setToken('')).finally(() => setLoading(false));
+    }).catch((err) => {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) setToken('');
+      else setApiError(`Hitilafu: ${status ?? 'seva haijibu'} — ${err?.message ?? ''}`);
+    }).finally(() => setLoading(false));
   }, [token, api]);
 
   // WebSocket for real-time events
@@ -137,6 +142,7 @@ export default function AdminPage() {
           ))}
         </div>
 
+        {apiError && <div style={{ color: '#ef4444', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{apiError}</div>}
         {loading && <div style={{ textAlign: 'center', color: '#6b7280', padding: '3rem' }}>Inapakia…</div>}
 
         {/* Stats */}
