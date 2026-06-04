@@ -2642,7 +2642,7 @@ function VirtualCardDisplay({ card, userName, onGet, getting }: {
   if (!card) {
     return (
       <div style={{
-        background: 'linear-gradient(135deg,#1e293b,#334155)',
+        background: 'linear-gradient(135deg,#1e293b,#0f172a)',
         borderRadius: 16, padding: '1.5rem', color: '#fff',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         justifyContent: 'center', gap: '0.75rem', minHeight: 160,
@@ -2665,11 +2665,11 @@ function VirtualCardDisplay({ card, userName, onGet, getting }: {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg,#1e3a8a,#1d4ed8,#0f172a)',
+      background: 'linear-gradient(135deg,#FF6B00,#c2410c,#1e293b)',
       borderRadius: 16, padding: '1.25rem 1.5rem', color: '#fff',
       fontFamily: '"Courier New", monospace', position: 'relative',
       minHeight: 160, display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-      boxShadow: '0 8px 32px rgba(30,58,138,0.35)',
+      boxShadow: '0 8px 32px rgba(255,107,0,0.30)',
     }}>
       {/* Top row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

@@ -48,20 +48,6 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   );
 }
 
-function BarChart({ data, color }: { data: { label: string; value: number }[]; color: string }) {
-  const max = Math.max(...data.map(d => d.value), 1);
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 130, padding: '0.5rem 0 0' }}>
-      {data.map(d => (
-        <div key={d.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <div style={{ fontSize: '0.72rem', fontWeight: 700, color }}>{d.value}</div>
-          <div title={`${d.label}: ${d.value}`} style={{ width: '60%', background: color, borderRadius: '4px 4px 0 0', height: `${Math.max(Math.round((d.value / max) * 90), d.value ? 3 : 0)}px`, opacity: 0.82, transition: 'height 0.4s ease' }} />
-          <div style={{ fontSize: '0.62rem', color: '#9ca3af', textAlign: 'center', lineHeight: 1.2 }}>{d.label}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function Badge({ text, color }: { text: string; color: string }) {
   const map: Record<string, { bg: string; fg: string }> = {
@@ -315,7 +301,10 @@ export default function AdminPage() {
             <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{profileName}</div>
           </div>
         </div>
-        <button onClick={logout} style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 7, padding: '0.35rem 0.875rem', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>Toka</button>
+        <button onClick={logout} title="Logout" style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #334155', borderRadius: 7, padding: '0.35rem 0.6rem', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+          <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Logout</span>
+        </button>
       </div>
 
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: '1.25rem 1rem' }}>
@@ -334,39 +323,15 @@ export default function AdminPage() {
 
         {/* ── Stats ── */}
         {!loading && tab === 'stats' && stats && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <StatCard label="Watumiaji Wote" value={stats.total_users} color="#3b82f6" />
-              <StatCard label="Warukaji" value={stats.riders} color="#8b5cf6" />
-              <StatCard label="Madereva" value={stats.drivers} color="#f59e0b" />
-              <StatCard label="Safari Zote" value={stats.total_trips} color="#6b7280" />
-              <StatCard label="Safari Hai" value={stats.active_trips} color="#FF6B00" />
-              <StatCard label="Zilizokamilika" value={stats.completed_trips} color="#10b981" />
-              <StatCard label="Zilizofutwa" value={stats.cancelled_trips} color="#ef4444" />
-              <StatCard label="Subiri Uthibitisho" value={stats.pending_verifications} color="#f59e0b" />
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-              <div style={{ flex: 1, minWidth: 200, background: '#fff', borderRadius: 12, padding: '1rem 1.25rem', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#374151', marginBottom: 2 }}>👥 Watumiaji</div>
-                <BarChart color="#8b5cf6" data={[{ label: 'Warukaji', value: stats.riders }, { label: 'Madereva', value: stats.drivers }]} />
-              </div>
-              <div style={{ flex: 2, minWidth: 280, background: '#fff', borderRadius: 12, padding: '1rem 1.25rem', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#374151', marginBottom: 2 }}>🏍️ Safari</div>
-                <BarChart color="#FF6B00" data={[
-                  { label: 'Zote', value: stats.total_trips },
-                  { label: 'Hai', value: stats.active_trips },
-                  { label: 'Zim.', value: stats.completed_trips },
-                  { label: 'Bat.', value: stats.cancelled_trips },
-                ]} />
-              </div>
-              <div style={{ flex: 1, minWidth: 200, background: '#fff', borderRadius: 12, padding: '1rem 1.25rem', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#374151', marginBottom: 2 }}>✅ Uthibitisho</div>
-                <BarChart color="#10b981" data={[
-                  { label: 'Subiri', value: stats.pending_verifications },
-                  { label: 'Madereva', value: stats.drivers },
-                ]} />
-              </div>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: '0.75rem' }}>
+            <StatCard label="Watumiaji Wote"     value={stats.total_users}           color="#3b82f6" />
+            <StatCard label="Warukaji"            value={stats.riders}                color="#8b5cf6" />
+            <StatCard label="Madereva"            value={stats.drivers}               color="#f59e0b" />
+            <StatCard label="Safari Zote"         value={stats.total_trips}           color="#6b7280" />
+            <StatCard label="Safari Hai"          value={stats.active_trips}          color="#FF6B00" />
+            <StatCard label="Zilizokamilika"      value={stats.completed_trips}       color="#10b981" />
+            <StatCard label="Zilizofutwa"         value={stats.cancelled_trips}       color="#ef4444" />
+            <StatCard label="Subiri Uthibitisho"  value={stats.pending_verifications} color="#f59e0b" />
           </div>
         )}
 
@@ -684,8 +649,9 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <button onClick={logout} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 9, padding: '0.6rem', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>
-                🚪 Toka
+              <button onClick={logout} style={{ background: '#fff7ed', color: '#FF6B00', border: '1px solid #fed7aa', borderRadius: 9, padding: '0.6rem 1rem', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                Logout
               </button>
             </div>
           </div>
