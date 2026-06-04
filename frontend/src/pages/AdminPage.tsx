@@ -23,7 +23,18 @@ function StatCard({ label, value, color }: { label: string; value: number; color
 }
 
 export default function AdminPage() {
-  const [token, setToken]     = useState(() => localStorage.getItem('admin_token') ?? '');
+  const [token, setToken]     = useState(() => {
+    const t = localStorage.getItem('admin_token') ?? '';
+    if (!t) return '';
+    try {
+      const payload = JSON.parse(atob(t.split('.')[1]));
+      if (payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('admin_token');
+        return '';
+      }
+    } catch { localStorage.removeItem('admin_token'); return ''; }
+    return t;
+  });
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginErr, setLoginErr]   = useState('');
   const [stats,    setStats]   = useState<Stats | null>(null);
