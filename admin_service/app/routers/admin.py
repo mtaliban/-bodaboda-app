@@ -60,7 +60,6 @@ async def get_users(page: int = 1, limit: int = 30, db: AsyncSession = Depends(g
     offset = (page - 1) * limit
     result = await db.execute(text("""
         SELECT u.id, u.full_name, u.email, u.phone, u.role, u.status, u.created_at,
-               u.email_verified,
                dp.verification_status AS driver_verification
         FROM users u
         LEFT JOIN driver_profiles dp ON dp.user_id = u.id
