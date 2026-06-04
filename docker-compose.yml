@@ -21,8 +21,6 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2.0
     container_name: mosquitto
-    # Port 1883 for internal MQTT; port 9001 kept for direct WS in local dev.
-    # In production (HTTPS), browsers use wss:///mqtt via Caddy instead.
     ports:
       - "1883:1883"
       - "9001:9001"
@@ -88,16 +86,39 @@ services:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
         VITE_DRIVER_SERVICE_URL: ${VITE_DRIVER_SERVICE_URL:-}
     image: ${DOCKER_USERNAME}/bodaboda-frontend:latest
-    ports:
-      - "80:80"
+    expose:
+      - "80"
     depends_on:
       - auth_service
     networks:
       - app_net
     restart: unless-stopped
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-localhost}
+    depends_on:
+      - frontend
+      - auth_service
+      - driver_service
+      - mosquitto
+    networks:
+      - app_net
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   app_net:

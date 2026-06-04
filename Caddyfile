@@ -1,44 +1,8 @@
-# HTTPS site — auto cert from Let's Encrypt (production) or Caddy local CA (dev)
-https://{$CADDY_DOMAIN:localhost} {
+{$CADDY_DOMAIN:localhost} {
 
     handle /mqtt {
         reverse_proxy mosquitto:9001
     }
-    handle /ws/* {
-        reverse_proxy auth_service:8001
-    }
-    handle /driver/* {
-        reverse_proxy driver_service:8002
-    }
-    handle /auth/* {
-        reverse_proxy auth_service:8001
-    }
-    handle /trips/* {
-        reverse_proxy auth_service:8001
-    }
-    handle /drivers/* {
-        reverse_proxy auth_service:8001
-    }
-    handle /notifications/* {
-        reverse_proxy auth_service:8001
-    }
-    handle /health* {
-        reverse_proxy auth_service:8001
-    }
-    handle /metrics* {
-        reverse_proxy auth_service:8001
-    }
-    handle /frontend-metrics* {
-        reverse_proxy auth_service:8001
-    }
-    handle {
-        reverse_proxy frontend:80
-    }
-}
-
-# Plain HTTP — direct raw IP access (http://3.85.53.81) works here.
-# Explicit https:// block above means no port-80 conflict.
-:80 {
     handle /ws/* {
         reverse_proxy auth_service:8001
     }

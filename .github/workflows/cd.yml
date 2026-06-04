@@ -16,6 +16,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Compute sslip.io domain
+        run: |
+          EC2_DOMAIN=$(echo '${{ secrets.EC2_HOST }}' | tr '.' '-').sslip.io
+          echo "EC2_DOMAIN=$EC2_DOMAIN" >> $GITHUB_ENV
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -42,12 +47,20 @@ jobs:
           context: ./frontend
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
+          build-args: |
+            VITE_API_BASE_URL=https://${{ env.EC2_DOMAIN }}
+            VITE_DRIVER_SERVICE_URL=https://${{ env.EC2_DOMAIN }}
 
   deploy-staging:
     needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
+      - name: Compute sslip.io domain
+        run: |
+          EC2_DOMAIN=$(echo '${{ secrets.EC2_HOST }}' | tr '.' '-').sslip.io
+          echo "EC2_DOMAIN=$EC2_DOMAIN" >> $GITHUB_ENV
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -64,16 +77,10 @@ jobs:
             cd /opt/bodaboda
             git pull origin main
 
-            echo "=== Disk space before cleanup ==="
-            df -h /
-
             echo "=== Cleaning Docker cache ==="
             docker stop \$(docker ps -q) 2>/dev/null || true
             docker rm \$(docker ps -aq) 2>/dev/null || true
             docker system prune -af --volumes 2>/dev/null || true
-
-            echo "=== Disk space after cleanup ==="
-            df -h /
 
             echo "=== Pulling new images ==="
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
@@ -82,6 +89,7 @@ jobs:
 
             echo "=== Starting stack ==="
             DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} \
+            CADDY_DOMAIN=${{ env.EC2_DOMAIN }} \
             docker compose up -d
 
             echo "=== Waiting for services ==="
@@ -91,12 +99,6 @@ jobs:
             curl -sf http://localhost:8001/health && echo "Auth API OK" || (echo "Auth API FAILED" && exit 1)
             curl -sf http://localhost:8002/health && echo "Driver API OK" || (echo "Driver API FAILED" && exit 1)
 
-            echo "=== MQTT broker check ==="
-            docker exec mosquitto mosquitto_pub \
-              -t rides/deploy/test \
-              -m '{"event_type":"DEPLOY_CHECK","status":"ok"}' \
-              -q 1 && echo "MQTT OK" || echo "MQTT check skipped"
-
             echo "Staging passed!"
           ENDSSH
 
@@ -105,6 +107,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Compute sslip.io domain
+        run: |
+          EC2_DOMAIN=$(echo '${{ secrets.EC2_HOST }}' | tr '.' '-').sslip.io
+          echo "EC2_DOMAIN=$EC2_DOMAIN" >> $GITHUB_ENV
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -119,18 +126,7 @@ jobs:
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
             set -e
             cd /opt/bodaboda
-
-            echo "=== Production is live ==="
             docker compose ps
-
-            docker compose exec -T mosquitto mosquitto_pub \
-              -t rides/deploy/test \
-              -m '{"event_type":"DEPLOY","status":"ok"}' \
-              -q 1 && echo "MQTT broker responding" || echo "MQTT check failed"
-
-            echo ""
             echo "Deploy complete!"
-            echo "   Frontend : http://${{ secrets.EC2_HOST }}"
-            echo "   Auth API : http://${{ secrets.EC2_HOST }}:8001"
-            echo "   Driver API: http://${{ secrets.EC2_HOST }}:8002"
+            echo "Site: https://${{ env.EC2_DOMAIN }}"
           ENDSSH
