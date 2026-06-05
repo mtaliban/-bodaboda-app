@@ -1121,6 +1121,24 @@ function DriverHomePanel() {
     })();
   }, []);
 
+  // When DriverOfferWatcher accepts a trip via its modal, sync state here immediately
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const { trip } = (e as CustomEvent<{ tripId: number; trip?: Trip }>).detail;
+      if (trip) setCurrentTrip(trip);
+      const updated = await refreshDriver();
+      if (!trip && updated?.status === 'BUSY') {
+        try {
+          const { data: trips } = await driverApi.get<Trip[]>('/driver/trips/my');
+          const active = trips.find(t => ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(t.status));
+          if (active) setCurrentTrip(active);
+        } catch { /* silent */ }
+      }
+    };
+    window.addEventListener('driver-trip-accepted', handler);
+    return () => window.removeEventListener('driver-trip-accepted', handler);
+  }, [refreshDriver]);
+
   const toggle = async () => {
     if (!driver || driver.status === 'BUSY') return;
     setToggling(true); setError('');
@@ -3341,11 +3359,10 @@ function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
     setAccepting(true);
     const tripId = offer.trip_id ?? offer.id;
     try {
-      await driverApi.post(`/driver/trips/${tripId}/accept`);
+      const { data: acceptedTrip } = await driverApi.post(`/driver/trips/${tripId}/accept`);
       clearOffer();
       setActiveTab('home');
-      // Refresh page state by triggering a storage event or just clear
-      window.dispatchEvent(new CustomEvent('driver-trip-accepted', { detail: { tripId } }));
+      window.dispatchEvent(new CustomEvent('driver-trip-accepted', { detail: { tripId, trip: acceptedTrip } }));
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Imeshindwa kukubali safari.';
       alert(msg);
