@@ -17,7 +17,7 @@ def _make_trip_name(pickup: str, dest: str, dt: datetime) -> str:
     day   = _SW_DAYS[dt.weekday()]
     month = _SW_MONTHS[dt.month - 1]
     return f"{shorten(pickup)} → {shorten(dest)} · {day} {dt.day} {month} {dt.year} {dt.strftime('%H:%M')}"
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -400,23 +400,24 @@ class TripService:
             select(RiderProfile).where(RiderProfile.id == trip.rider_id)
         )
         rp = rp_result.scalar_one_or_none()
-        rider_user_result = await self.db.execute(
-            select(User).where(User.id == rp.user_id)
-        ) if rp else None
-        rider_user = rider_user_result.scalar_one_or_none() if rider_user_result else None
-        if rider_user is not None:
-            old_bal = Decimal(str(rider_user.wallet_balance or 0))
-            new_bal = max(Decimal('0'), old_bal - Decimal(str(fare)))
-            await self.db.execute(
-                update(User).where(User.id == rider_user.id).values(wallet_balance=new_bal)
+        rider_user: User | None = None
+        if rp:
+            ru_result = await self.db.execute(
+                select(User).where(User.id == rp.user_id)
             )
+            rider_user = ru_result.scalar_one_or_none()
+        if rider_user is not None:
+            old_bal = Decimal(str(rider_user.wallet_balance)) if rider_user.wallet_balance is not None else Decimal('0')
+            new_bal = max(Decimal('0'), old_bal - Decimal(str(fare)))
+            rider_user.wallet_balance = new_bal
+            desc = f"Safari #{trip.id} — {(trip.pickup_address or '')[:80]} → {(trip.destination_address or '')[:80]}"
             self.db.add(WalletTransaction(
                 user_id=rider_user.id,
                 type="DEBIT",
                 amount=Decimal(str(fare)),
                 balance_after=new_bal,
                 trip_id=trip.id,
-                description=f"Safari #{trip.id} — {trip.pickup_address or ''} → {trip.destination_address or ''}",
+                description=desc[:200],
             ))
             wallet_msg = f"TSh {fare:,} imekatwa kwa safari yako."
         else:
