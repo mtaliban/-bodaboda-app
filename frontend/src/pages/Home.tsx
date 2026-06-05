@@ -268,6 +268,78 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── About ────────────────────────────────────────────── */}
+      <section className="section section-white" id="about">
+        <div className="section-inner">
+          <div className="section-header center">
+            <div className="section-eyebrow">— Kuhusu Sisi</div>
+            <h2 className="section-title">Nini BodaBoda?</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: '1.5rem', marginTop: '2rem' }}>
+            <div style={{ background: 'linear-gradient(135deg,#0f172a,#1e3a5f)', borderRadius: 16, padding: '1.75rem', color: '#fff' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🏍️</div>
+              <h3 style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Dhamira Yetu</h3>
+              <p style={{ fontSize: '0.88rem', lineHeight: 1.7, opacity: 0.85, margin: 0 }}>
+                BodaBoda ni jukwaa la kisasa la kuomba usafiri wa pikipiki hapa Tanzania. Lengo letu ni kuunganisha abiria na madereva wa kuaminika kwa haraka na urahisi — popote ulipo mjini.
+              </p>
+            </div>
+            <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 16, padding: '1.75rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🌍</div>
+              <h3 style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: '0.5rem', color: '#0f172a' }}>Tunapofikia</h3>
+              <p style={{ fontSize: '0.88rem', lineHeight: 1.7, color: '#64748b', margin: 0 }}>
+                Tunaanza safari katika miji mikuu ya Tanzania. Tunakua kila siku — na madereva zaidi wa pikipiki wanajiunga na jukwaa letu kuleta huduma bora zaidi kwa jamii yetu.
+              </p>
+            </div>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 16, padding: '1.75rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🔒</div>
+              <h3 style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: '0.5rem', color: '#0f172a' }}>Usalama Kwanza</h3>
+              <p style={{ fontSize: '0.88rem', lineHeight: 1.7, color: '#64748b', margin: 0 }}>
+                Kila dereva anathibitishwa na timu yetu kabla hajaanza kufanya kazi. Unaweza kushiriki safari yako moja kwa moja na familia au marafiki kwa usalama kamili.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Contact Us ───────────────────────────────────────── */}
+      <section className="section section-gray" id="contact">
+        <div className="section-inner">
+          <div className="section-header center">
+            <div className="section-eyebrow">— Wasiliana Nasi</div>
+            <h2 className="section-title">Tuko Hapa Kukusaidia</h2>
+            <p className="section-sub">
+              Una swali? Tatizo? Au unataka kujiunga kama mshirika? Wasiliana nasi wakati wowote.
+            </p>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2rem' }}>
+            <div style={{ background: '#fff', borderRadius: 18, padding: '2rem', maxWidth: 480, width: '100%', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <a href="tel:+255763795801" style={{ display: 'flex', alignItems: 'center', gap: '1rem', textDecoration: 'none', background: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#FF6B00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>📞</div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Simu</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>+255 763 795 801</div>
+                </div>
+              </a>
+              <a href="mailto:Hamisiselemani039@gmail.com" style={{ display: 'flex', alignItems: 'center', gap: '1rem', textDecoration: 'none', background: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>✉️</div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Barua Pepe</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a', wordBreak: 'break-all' }}>Hamisiselemani039@gmail.com</div>
+                </div>
+              </a>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 12, padding: '1rem 1.25rem' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', flexShrink: 0 }}>🏢</div>
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Kampuni</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>BodaBoda Tanzania</div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Usafiri wa Pikipiki — Fast, Safe, Affordable</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA Banner ───────────────────────────────────────── */}
       {!isLoading && !isAuthenticated && (
         <section className="cta-banner">

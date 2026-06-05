@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { flushSync } from 'react-dom';
+import { flushSync, createPortal } from 'react-dom';
 import { AxiosError } from 'axios';
 import L from 'leaflet';
 import { useAuth } from '../context/AuthContext';
@@ -822,6 +822,28 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
+  // Periodic GPS broadcast every 5s while trip is active
+  useEffect(() => {
+    const isActive = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
+    if (!isActive || !trip.driver_id) return;
+
+    const id = setInterval(() => {
+      if (!realGpsRef.current) return; // don't send 0,0
+      const { lat, lng } = realGpsRef.current;
+      publishLoc(`driver/${trip.driver_id}/location`, {
+        event_id:   `loc_periodic_${Date.now()}`,
+        event_type: 'DRIVER_LOCATION',
+        timestamp:  new Date().toISOString(),
+        version:    '1.0',
+        payload:    { lat, lng, driver_id: trip.driver_id, trip_id: trip.id },
+      });
+      // Also update REST endpoint silently
+      driverApi.post('/driver/location', { trip_id: trip.id, lat, lng }).catch(() => {});
+    }, 5000);
+
+    return () => clearInterval(id);
+  }, [trip.status, trip.id, trip.driver_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // GPS for action events — uses cached realGpsRef, falls back to trip coords only if GPS never arrived
   const getSmartCoords = useCallback((_eventType: string): Promise<{ lat: number; lng: number; address?: string }> => {
     if (realGpsRef.current) {
@@ -1068,17 +1090,6 @@ function DriverHomePanel() {
       payload:    { lat, lng, address, ...extraPayload },
     });
   }, [publishStatus]);
-
-  // MQTT — listen for incoming ride requests from Driver Service
-  const mqttTopics = driver?.status === 'AVAILABLE'
-    ? ['drivers/available/rides']
-    : [];
-
-  useMqtt(mqttTopics, useCallback((event: MqttEvent) => {
-    if (event.event_type === 'RIDE_AVAILABLE') {
-      setIncomingTrip(event.payload as unknown as Trip);
-    }
-  }, []));
 
   const refreshDriver = useCallback(async (): Promise<DriverOut | null> => {
     try {
@@ -2152,7 +2163,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
       </div>
 
       {/* ── Chat overlay (always mounted when showChat so WebSocket stays connected; visibility controlled via display) ── */}
-      {showChat && (
+      {showChat && createPortal(
         <div ref={chatOverlayRef} className="tsv-chat-overlay" style={{ display: chatOpen ? 'flex' : 'none' }}>
           <div className="tsv-chat-header">
             <button className="tsv-chat-back" onClick={() => setChatOpen(false)}>←</button>
@@ -2183,7 +2194,8 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
               setTimeout(() => setPaymentToast(null), 5000);
             }
           }} />
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Bottom panel ── */}
@@ -3271,7 +3283,10 @@ function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
   activeTab: Tab;
   setActiveTab: (t: Tab) => void;
 }) {
-  const [banner, setBanner] = useState(false);
+  const [offer, setOffer]         = useState<Record<string, unknown> | null>(null);
+  const [accepting, setAccepting] = useState(false);
+  const [countdown, setCountdown] = useState(30);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -3279,30 +3294,141 @@ function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
     }
   }, []);
 
-  useMqtt(['rides/new'], useCallback((event: MqttEvent) => {
-    if (event.event_type !== 'RIDE_REQUESTED') return;
-    const p = event.payload as Record<string, unknown>;
+  const clearOffer = useCallback(() => {
+    setOffer(null);
+    setCountdown(30);
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }, []);
 
+  const handleNewOffer = useCallback((payload: Record<string, unknown>) => {
+    setOffer(payload);
+    setCountdown(30);
+    setActiveTab('home');
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setCountdown(c => {
+        if (c <= 1) { clearOffer(); return 30; }
+        return c - 1;
+      });
+    }, 1000);
+
+    // Browser push notification
     if ('Notification' in window && Notification.permission === 'granted') {
       const n = new Notification('🏍️ Ombi Jipya la Safari!', {
-        body: `${p.pickup_address ?? ''} → ${p.destination_address ?? ''}`,
-        tag: `offer-${String(p.trip_id)}`,
+        body: `${payload.pickup_address ?? ''} → ${payload.destination_address ?? ''}`,
+        tag: `offer-${String(payload.trip_id)}`,
         requireInteraction: true,
       });
       n.onclick = () => { window.focus(); setActiveTab('home'); n.close(); };
     }
+  }, [setActiveTab, clearOffer]);
 
-    setBanner(true);
-    setTimeout(() => setBanner(false), 12000);
-    setActiveTab('home');
-  }, [setActiveTab]));
+  // Listen to both the raw ride event AND the driver-specific broadcast
+  useMqtt(['drivers/available/rides'], useCallback((event: MqttEvent) => {
+    if (event.event_type === 'RIDE_AVAILABLE') {
+      handleNewOffer(event.payload as Record<string, unknown>);
+    }
+  }, [handleNewOffer]));
 
-  if (!banner) return null;
+  useMqtt(['rides/new'], useCallback((event: MqttEvent) => {
+    if (event.event_type === 'RIDE_REQUESTED') {
+      handleNewOffer(event.payload as Record<string, unknown>);
+    }
+  }, [handleNewOffer]));
 
-  return (
-    <div className="driver-offer-banner" onClick={() => setActiveTab('home')}>
-      🏍️ Ombi jipya la safari limekuja — Gonga kukubali!
-    </div>
+  const accept = async () => {
+    if (!offer) return;
+    setAccepting(true);
+    const tripId = offer.trip_id ?? offer.id;
+    try {
+      await driverApi.post(`/driver/trips/${tripId}/accept`);
+      clearOffer();
+      setActiveTab('home');
+      // Refresh page state by triggering a storage event or just clear
+      window.dispatchEvent(new CustomEvent('driver-trip-accepted', { detail: { tripId } }));
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Imeshindwa kukubali safari.';
+      alert(msg);
+      clearOffer();
+    }
+    setAccepting(false);
+  };
+
+  if (!offer) return null;
+
+  const fareStr = offer.fare_tzs ? `TSh ${Number(offer.fare_tzs).toLocaleString()}` : '';
+
+  return createPortal(
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 3000,
+      background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      padding: '0.75rem',
+      paddingTop: 'max(2rem, env(safe-area-inset-top))',
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: 20, width: '100%', maxWidth: 440,
+        boxShadow: '0 12px 50px rgba(0,0,0,0.45)',
+        overflow: 'hidden',
+        animation: 'trip-notification-bounce 0.35s cubic-bezier(0.34,1.56,0.64,1)',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ff6b00, #ff8c00)',
+          color: '#fff', padding: '1rem',
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+        }}>
+          <span style={{ fontSize: '1.8rem' }}>🏍️</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>Safari Mpya!</div>
+            <div style={{ fontSize: '0.78rem', opacity: 0.9 }}>
+              {String(offer.trip_name ?? `Safari #${offer.trip_id}`)}
+            </div>
+          </div>
+          <div style={{
+            background: 'rgba(255,255,255,0.25)',
+            borderRadius: '50%', width: 40, height: 40,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1rem', fontWeight: 800, flexShrink: 0,
+          }}>
+            {countdown}s
+          </div>
+        </div>
+        {/* Route */}
+        <div style={{ padding: '0.875rem 1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.6rem' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e', flexShrink: 0, marginTop: 4 }} />
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1e293b' }}>{String(offer.pickup_address ?? '')}</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', flexShrink: 0, marginTop: 4 }} />
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1e293b' }}>{String(offer.destination_address ?? '')}</span>
+          </div>
+          <div style={{
+            display: 'flex', gap: '0.75rem', marginTop: '0.75rem',
+            background: '#f8fafc', borderRadius: 10, padding: '0.5rem 0.75rem', flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>🏍️ {String(offer.ride_type ?? 'BODA')}</span>
+            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>💵 {String(offer.payment_method ?? 'CASH')}</span>
+            {fareStr && <span style={{ fontSize: '0.85rem', color: '#059669', fontWeight: 700 }}>{fareStr}</span>}
+          </div>
+        </div>
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 1rem' }}>
+          <button
+            style={{ flex: 1, padding: '0.875rem', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+            onClick={clearOffer} disabled={accepting}
+          >✕ Kataa</button>
+          <button
+            style={{ flex: 2, padding: '0.875rem', background: 'linear-gradient(135deg, #ff6b00, #ff8c00)', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', boxShadow: '0 4px 14px rgba(255,107,0,0.45)', opacity: accepting ? 0.7 : 1 }}
+            onClick={accept} disabled={accepting}
+          >
+            {accepting ? '⏳ Inakubali…' : '✓ Kubali Safari'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

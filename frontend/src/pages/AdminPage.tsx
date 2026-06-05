@@ -14,15 +14,13 @@ interface HistEvent { id: number; trip_id: number; event_type: string; changed_b
 function fmtDate(s: string) { return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
 function fmtTime(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
-function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
+function triggerDownload(content: string, filename: string) {
   const a = document.createElement('a');
-  a.href = url;
+  a.href = `data:text/csv;charset=utf-8,${encodeURIComponent(content)}`;
   a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function exportCsv(rows: Record<string, unknown>[], filename: string) {
@@ -30,7 +28,7 @@ function exportCsv(rows: Record<string, unknown>[], filename: string) {
   const cols = Object.keys(rows[0]);
   const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csv = '﻿' + [cols.map(escape).join(','), ...rows.map(r => cols.map(c => escape(r[c])).join(','))].join('\r\n');
-  triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
+  triggerDownload(csv, filename);
 }
 
 function exportExcel(rows: Record<string, unknown>[], filename: string) {
@@ -38,7 +36,7 @@ function exportExcel(rows: Record<string, unknown>[], filename: string) {
   const cols = Object.keys(rows[0]);
   const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csv = '﻿' + [cols.map(escape).join(','), ...rows.map(r => cols.map(c => escape(r[c])).join(','))].join('\r\n');
-  triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
+  triggerDownload(csv, filename.replace(/\.xls$/, '.csv'));
 }
 
 function ExportBar({ rows, name }: { rows: Record<string, unknown>[]; name: string }) {
@@ -144,6 +142,8 @@ export default function AdminPage() {
   const [editTripForm, setEditTripForm] = useState({ trip_name: '', status: '', pickup_address: '', destination_address: '' });
   const [resetPwdUser, setResetPwdUser] = useState<AdminUser | null>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [showCreateCard, setShowCreateCard] = useState(false);
+  const [createCardUserId, setCreateCardUserId] = useState('');
 
   // Admin profile (local)
   const [profileName, setProfileName]   = useState(() => localStorage.getItem('admin_display_name') || 'Admin');
@@ -190,7 +190,7 @@ export default function AdminPage() {
     } catch { setLoginErr('Jina la mtumiaji au nywila si sahihi.'); }
   };
 
-  const logout = () => { localStorage.removeItem('admin_token'); setToken(''); };
+  const logout = () => { localStorage.removeItem('admin_token'); window.location.href = '/'; };
 
   const verifyDriver = async (profileId: number, status: 'VERIFIED' | 'REJECTED') => {
     await axios.patch(`${ADMIN_API}/admin/drivers/${profileId}/verify`, { status }, { headers });
@@ -224,8 +224,22 @@ export default function AdminPage() {
     try {
       await axios.delete(`${ADMIN_API}/admin/wallet/cards/${cardId}`, { headers });
       setWalletCards(p => p.filter(c => c.id !== cardId));
-      toast('Kadi imefutwa.');
+      toast('Kadi imefutwa. Mtumiaji amearidhiwa.');
     } catch { toast('Imeshindwa kufuta kadi.'); }
+  };
+
+  const createCardForUser = async () => {
+    const uid = parseInt(createCardUserId.trim());
+    if (!uid || isNaN(uid)) { toast('Ingiza ID ya mtumiaji sahihi.'); return; }
+    try {
+      const res = await axios.post(`${ADMIN_API}/admin/wallet/cards/user/${uid}`, {}, { headers });
+      setWalletCards(p => [res.data, ...p]);
+      setShowCreateCard(false); setCreateCardUserId('');
+      toast(`Kadi imetengenezwa kwa ${res.data.user_name ?? `User #${uid}`}.`);
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast(detail ?? 'Imeshindwa kutengeneza kadi.');
+    }
   };
 
   function extractExpiry(str: string) {
@@ -654,9 +668,15 @@ export default function AdminPage() {
 
             {walletSubTab === 'cards' && (
               <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', borderBottom: '1px solid #f3f4f6' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>Kadi za Virtual za Watumiaji</div>
-                  <ExportBar rows={walletCards} name="virtual_cards" />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', borderBottom: '1px solid #f3f4f6', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>💳 Kadi za Virtual za Watumiaji</div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button onClick={() => { setShowCreateCard(true); setCreateCardUserId(''); }}
+                      style={{ background: '#0f172a', color: '#fff', border: 'none', borderRadius: 7, padding: '0.35rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                      ➕ Unda Kadi
+                    </button>
+                    <ExportBar rows={walletCards} name="virtual_cards" />
+                  </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -738,21 +758,6 @@ export default function AdminPage() {
               <button onClick={saveProfile} style={{ background: '#0f172a', color: '#fff', border: 'none', borderRadius: 9, padding: '0.7rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Hifadhi Taarifa
               </button>
-
-              <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '1rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', marginBottom: '0.5rem' }}>Taarifa za Mfumo</div>
-                <div style={{ fontSize: '0.78rem', color: '#64748b', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <div>Watumiaji: <strong>{stats?.total_users ?? '—'}</strong></div>
-                  <div>Madereva: <strong>{stats?.drivers ?? '—'}</strong></div>
-                  <div>Safari zote: <strong>{stats?.total_trips ?? '—'}</strong></div>
-                  <div>Zilizokamilika: <strong>{stats?.completed_trips ?? '—'}</strong></div>
-                </div>
-              </div>
-
-              <button onClick={logout} style={{ background: '#fff7ed', color: '#FF6B00', border: '1px solid #fed7aa', borderRadius: 9, padding: '0.6rem 1rem', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-                Logout
-              </button>
             </div>
           </div>
         )}
@@ -800,6 +805,20 @@ export default function AdminPage() {
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button onClick={saveEditTrip} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
             <button onClick={() => setEditTrip(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Create Card Modal */}
+      {showCreateCard && (
+        <Modal title="💳 Unda Kadi ya Virtual" onClose={() => setShowCreateCard(false)}>
+          <p style={{ fontSize: '0.83rem', color: '#64748b', margin: 0 }}>
+            Ingiza ID ya mtumiaji (unaweza kuona kwenye jedwali la Watumiaji). Kadi mpya itatengenezwa na mtumiaji ataarifiwa.
+          </p>
+          <Input label="User ID" value={createCardUserId} onChange={setCreateCardUserId} placeholder="e.g. 42" />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={createCardForUser} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Unda</button>
+            <button onClick={() => setShowCreateCard(false)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
           </div>
         </Modal>
       )}

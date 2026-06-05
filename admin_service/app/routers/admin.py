@@ -1,7 +1,8 @@
 import asyncio
 import json
 import os
-from datetime import datetime
+import random
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
@@ -293,9 +294,80 @@ async def extend_virtual_card(card_id: int, body: dict, db: AsyncSession = Depen
 # ── Delete Virtual Card (burn) ────────────────────────────────────────────────
 @router.delete("/wallet/cards/{card_id}", dependencies=[Depends(verify_admin_token)])
 async def delete_virtual_card(card_id: int, db: AsyncSession = Depends(get_db)):
+    # Fetch user_id before deleting so we can notify them
+    info = await db.execute(text("SELECT user_id FROM virtual_cards WHERE id = :id"), {"id": card_id})
+    row = info.mappings().one_or_none()
+    if row:
+        uid = row["user_id"]
+        profile_row = await db.execute(text("""
+            SELECT u.role,
+                   COALESCE(rp.id, dp.id) AS profile_id
+            FROM users u
+            LEFT JOIN rider_profiles rp ON rp.user_id = u.id AND u.role = 'RIDER'
+            LEFT JOIN driver_profiles dp ON dp.user_id = u.id AND u.role = 'DRIVER'
+            WHERE u.id = :uid
+        """), {"uid": uid})
+        pr = profile_row.mappings().one_or_none()
+        if pr and pr["profile_id"]:
+            await db.execute(text("""
+                INSERT INTO notifications (recipient_role, recipient_profile_id, title, message, type, is_read)
+                VALUES (:role, :pid, 'Kadi ya Mkoba Imefutwa', 'Kadi yako ya mkoba wa BodaBoda imefutwa na msimamizi.', 'CARD_BURNED', FALSE)
+            """), {"role": pr["role"], "pid": pr["profile_id"]})
     await db.execute(text("DELETE FROM virtual_cards WHERE id = :id"), {"id": card_id})
     await db.commit()
     return {"ok": True}
+
+
+def _gen_card_number() -> str:
+    digits = [4] + [random.randint(0, 9) for _ in range(15)]
+    return ' '.join(''.join(str(d) for d in digits[i:i+4]) for i in range(0, 16, 4))
+
+
+# ── Create Virtual Card for user (admin) ──────────────────────────────────────
+@router.post("/wallet/cards/user/{user_id}", dependencies=[Depends(verify_admin_token)])
+async def create_card_for_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(text("SELECT id FROM virtual_cards WHERE user_id = :uid"), {"uid": user_id})
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Mtumiaji tayari ana kadi ya mkoba")
+    now = datetime.now(timezone.utc)
+    card_number = _gen_card_number()
+    expiry_month = random.randint(1, 12)
+    expiry_year = now.year + random.randint(3, 5)
+    cvv = str(random.randint(100, 999))
+    result = await db.execute(text("""
+        INSERT INTO virtual_cards (user_id, card_number, expiry_month, expiry_year, cvv)
+        VALUES (:uid, :cn, :em, :ey, :cvv) RETURNING id, created_at
+    """), {"uid": user_id, "cn": card_number, "em": expiry_month, "ey": expiry_year, "cvv": cvv})
+    new_row = result.mappings().one()
+    # Notify user
+    profile_row = await db.execute(text("""
+        SELECT u.role, u.full_name,
+               COALESCE(rp.id, dp.id) AS profile_id
+        FROM users u
+        LEFT JOIN rider_profiles rp ON rp.user_id = u.id AND u.role = 'RIDER'
+        LEFT JOIN driver_profiles dp ON dp.user_id = u.id AND u.role = 'DRIVER'
+        WHERE u.id = :uid
+    """), {"uid": user_id})
+    pr = profile_row.mappings().one_or_none()
+    if pr and pr["profile_id"]:
+        await db.execute(text("""
+            INSERT INTO notifications (recipient_role, recipient_profile_id, title, message, type, is_read)
+            VALUES (:role, :pid, 'Kadi ya Mkoba Imetengenezwa', 'Kadi yako ya mkoba wa BodaBoda imetengenezwa na msimamizi. Inaweza kutumika sasa.', 'CARD_CREATED', FALSE)
+        """), {"role": pr["role"], "pid": pr["profile_id"]})
+    await db.commit()
+    user_name = pr["full_name"] if pr else "—"
+    return {
+        "ok": True,
+        "id": new_row["id"],
+        "user_id": user_id,
+        "user_name": user_name,
+        "user_phone": None,
+        "user_role": pr["role"] if pr else None,
+        "card_number": card_number,
+        "expiry_month": expiry_month,
+        "expiry_year": expiry_year,
+        "created_at": new_row["created_at"],
+    }
 
 
 # ── WebSocket — real-time event feed ─────────────────────────────────────────
