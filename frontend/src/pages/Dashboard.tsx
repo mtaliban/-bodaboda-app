@@ -311,13 +311,13 @@ const TRACK_STEPS = ['Received','Accepted','On the way','Arriving','Completed'];
 
 function getTrackIdx(status: string): number {
   const m: Record<string,number> = {
-    SEARCHING_DRIVER: 0,
-    DRIVER_ASSIGNED:  2,
-    DRIVER_ARRIVED:   3,
-    IN_PROGRESS:      3,
-    COMPLETED:        4,
+    SEARCHING_DRIVER:    0,
+    DRIVER_ASSIGNED:     1,
+    IN_PROGRESS:         2,
+    DRIVER_ARRIVED:      3,
+    COMPLETED:           4,
     NO_DRIVER_AVAILABLE: 0,
-    CANCELLED: 0,
+    CANCELLED:           0,
   };
   return m[status] ?? 0;
 }
@@ -1141,8 +1141,9 @@ function DriverHomePanel() {
     return () => window.removeEventListener('driver-trip-accepted', handler);
   }, [refreshDriver]);
 
-  // Panel-level payment subscription — survives CurrentTripCard unmount
-  const payTopic = completedTripId ? [`rides/${completedTripId}/payment`] : [];
+  // Panel-level payment subscription — active DURING trip so it's ready before backend publishes
+  const activeTripId = currentTrip?.id ?? completedTripId;
+  const payTopic = activeTripId ? [`rides/${activeTripId}/payment`] : [];
   useMqtt(payTopic, useCallback((event: MqttEvent) => {
     if (event.event_type === 'PAYMENT_DONE') {
       const p = event.payload as Record<string, unknown>;
@@ -2068,9 +2069,24 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
     }
   }, [])); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Polling fallback (30s)
+  // Fast poll (5s) while SEARCHING_DRIVER — catches DRIVER_ASSIGNED if MQTT event arrived before subscription
   useEffect(() => {
-    if (!ACTIVE_TRIP_STATUSES.includes(trip.status)) return;
+    if (trip.status !== 'SEARCHING_DRIVER') return;
+    const id = setInterval(async () => {
+      try {
+        const { data } = await api.get<Trip>(`/trips/${trip.id}`);
+        if (data.status !== 'SEARCHING_DRIVER') {
+          setTrip(data);
+          if (data.assigned_driver?.id) setDriverId(data.assigned_driver.id);
+        }
+      } catch {}
+    }, 5000);
+    return () => clearInterval(id);
+  }, [trip.id, trip.status]);
+
+  // Polling fallback (30s) for other active statuses
+  useEffect(() => {
+    if (!ACTIVE_TRIP_STATUSES.includes(trip.status) || trip.status === 'SEARCHING_DRIVER') return;
     const interval = setInterval(async () => {
       try {
         const { data } = await api.get<Trip>(`/trips/${trip.id}`);
