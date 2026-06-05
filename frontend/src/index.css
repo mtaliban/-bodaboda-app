@@ -4443,10 +4443,13 @@ button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
 .tsv-chat-overlay {
   position: fixed;
   inset: 0;
-  z-index: 300;
+  /* must be above Leaflet (marker pane = 600, popup = 700) */
+  z-index: 800;
   display: flex;
   flex-direction: column;
   background: #f0f2f5;
+  /* use dvh so overlay shrinks when mobile keyboard opens */
+  height: 100dvh;
 }
 
 .tsv-chat-header {

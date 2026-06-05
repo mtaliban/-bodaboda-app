@@ -361,7 +361,7 @@ function saveChat(tripId: number, msgs: ChatMsg[]) {
   try { localStorage.setItem(chatKey(tripId), JSON.stringify(msgs)); } catch {}
 }
 
-function TripChat({ tripId, myRole, onNewMessage }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; myName: string; onNewMessage?: () => void }) {
+function TripChat({ tripId, myRole, onNewMessage }: { tripId: number; myRole: 'RIDER' | 'DRIVER'; myName: string; onNewMessage?: (text?: string) => void }) {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [wsState, setWsState] = useState<'connecting' | 'open' | 'closed'>('connecting');
@@ -397,7 +397,7 @@ function TripChat({ tripId, myRole, onNewMessage }: { tripId: number; myRole: 'R
         if (d.type === 'message') {
           const msg: ChatMsg = { id: d.id, sender: d.role, senderName: d.name, message: d.text ?? '', image_url: d.image_url, time: d.time, read_at: d.read_at };
           setMessages(prev => { const u = [...prev, msg]; saveChat(tripId, u); return u; });
-          if (d.role !== myRole) onNewMessage?.();
+          if (d.role !== myRole) onNewMessage?.(d.text ?? '');
         } else if (d.type === 'deleted') {
           setMessages(prev => prev.filter(m => String(m.id) !== String(d.id)));
         } else if (d.type === 'read_by') {
@@ -782,10 +782,12 @@ interface CurrentTripCardProps {
 }
 
 function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentTripCardProps & { driverName: string }) {
-  const [notifying, setNotifying]   = useState(false);
-  const [notifySent, setNotifySent] = useState(false);
-  const [chatOpen, setChatOpen]     = useState(false);
-  const [chatUnread, setChatUnread] = useState(0);
+  const [notifying, setNotifying]       = useState(false);
+  const [notifySent, setNotifySent]     = useState(false);
+  const [chatOpen, setChatOpen]         = useState(false);
+  const [chatUnread, setChatUnread]     = useState(0);
+  const [chatToast, setChatToast]       = useState<string | null>(null);
+  const chatToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLocRef = useRef<{ lat: number; lng: number } | null>(null);
   const rtcDriver = useWebRTCCall(trip.id);
 
@@ -912,8 +914,28 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
           📞 Piga Simu
         </button>
       </div>
+      {/* Chat message toast — shows sender's text like WhatsApp */}
+      {chatToast && (
+        <div style={{
+          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          background: '#1e293b', color: '#fff', borderRadius: 12, padding: '0.6rem 1rem',
+          fontSize: '0.88rem', fontWeight: 600, zIndex: 900, maxWidth: '90vw',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem',
+        }}>
+          💬 Abiria: {chatToast}
+        </div>
+      )}
       <div style={{ display: chatOpen ? undefined : 'none' }}>
-        <TripChat tripId={trip.id} myRole="DRIVER" myName={driverName} onNewMessage={() => { if (!chatOpen) setChatUnread(c => c + 1); }} />
+        <TripChat tripId={trip.id} myRole="DRIVER" myName={driverName} onNewMessage={(text?: string) => {
+          if (!chatOpen) {
+            setChatUnread(c => c + 1);
+            if (text) {
+              setChatToast(text.length > 60 ? text.slice(0, 60) + '…' : text);
+              if (chatToastTimer.current) clearTimeout(chatToastTimer.current);
+              chatToastTimer.current = setTimeout(() => setChatToast(null), 4000);
+            }
+          }
+        }} />
       </div>
 
       {/* ── Buttons: exactly what matches the current status ── */}
@@ -2847,26 +2869,125 @@ function WalletTab() {
         </div>
       )}
 
-      {/* 4. Debit history (fare deductions only) */}
+      {/* 4. Statistics */}
+      {!loading && txns.length > 0 && (() => {
+        const debits = txns.filter(t => t.type === 'DEBIT');
+        const totalSpent = debits.reduce((s, t) => s + t.amount, 0);
+        const avg = debits.length > 0 ? Math.round(totalSpent / debits.length) : 0;
+        return (
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 100, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+              <div style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.95rem' }}>TSh {totalSpent.toLocaleString()}</div>
+              <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2 }}>Jumla Iliyotumika</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 80, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+              <div style={{ fontWeight: 800, color: '#2563eb', fontSize: '0.95rem' }}>{debits.length}</div>
+              <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2 }}>Safari Zote</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 100, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+              <div style={{ fontWeight: 800, color: '#16a34a', fontSize: '0.95rem' }}>TSh {avg.toLocaleString()}</div>
+              <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2 }}>Wastani/Safari</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 5. Debit history */}
       {!loading && txns.filter(t => t.type === 'DEBIT').length > 0 && (
         <>
-          <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.5rem' }}>Safari Zilizolipwa</div>
+          <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.5rem' }}>Historia ya Malipo</div>
           {txns.filter(t => t.type === 'DEBIT').map(t => (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 0', borderBottom: '1px solid #f3f4f6' }}>
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 0.75rem', marginBottom: '0.4rem', background: '#fff', border: '1px solid #f1f5f9', borderRadius: 10 }}>
               <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>⬇️</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.description}</div>
                 <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#dc2626' }}>
-                  -TSh {t.amount.toLocaleString()}
-                </div>
-                <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Bal: {t.balance_after.toLocaleString()}</div>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#dc2626' }}>-TSh {t.amount.toLocaleString()}</div>
+                <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Sal: {t.balance_after.toLocaleString()}</div>
               </div>
             </div>
           ))}
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Driver Wallet Tab ─────────────────────────────────────────────────
+
+function DriverWalletTab() {
+  const { user } = useAuth();
+  const [data, setData]     = useState<WalletData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr]       = useState('');
+
+  useEffect(() => {
+    api.get<WalletData>('/wallet')
+      .then(({ data: d }) => setData(d))
+      .catch(e => setErr(extractApiError(e)))
+      .finally(() => setLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '3rem' }}><div className="spinner" /></div>;
+  if (err) return <div style={{ padding: '1rem' }}><Alert type="error" message={err} /></div>;
+
+  const balance = data?.balance ?? 0;
+  const txns    = data?.transactions ?? [];
+  const credits = txns.filter(t => t.type === 'CREDIT');
+  const totalEarned = credits.reduce((s, t) => s + t.amount, 0);
+  const avgEarning  = credits.length > 0 ? Math.round(totalEarned / credits.length) : 0;
+
+  return (
+    <div style={{ maxWidth: 440, margin: '0 auto', padding: '1rem 0.75rem' }}>
+
+      {/* Balance card */}
+      <div style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #e85d04 100%)', borderRadius: 16, padding: '1.5rem 1.25rem', color: '#fff', marginBottom: '1rem' }}>
+        <div style={{ fontSize: '0.75rem', opacity: 0.8, marginBottom: '0.25rem' }}>Salio la Mkoba — Mapato</div>
+        <div style={{ fontSize: '2rem', fontWeight: 800 }}>TSh {balance.toLocaleString()}</div>
+        <div style={{ fontSize: '0.75rem', opacity: 0.65, marginTop: '0.4rem' }}>{user?.full_name}</div>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 100, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+          <div style={{ fontWeight: 800, color: '#16a34a', fontSize: '0.95rem' }}>TSh {totalEarned.toLocaleString()}</div>
+          <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2 }}>Jumla Mapato</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 80, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+          <div style={{ fontWeight: 800, color: '#2563eb', fontSize: '0.95rem' }}>{credits.length}</div>
+          <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2 }}>Safari Zilipewa</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 100, background: '#fefce8', border: '1px solid #fde68a', borderRadius: 10, padding: '0.65rem 0.75rem', textAlign: 'center' }}>
+          <div style={{ fontWeight: 800, color: '#ca8a04', fontSize: '0.95rem' }}>TSh {avgEarning.toLocaleString()}</div>
+          <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: 2 }}>Wastani/Safari</div>
+        </div>
+      </div>
+
+      {/* Earnings history */}
+      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.6rem' }}>Historia ya Mapato (90%)</div>
+      {credits.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '2.5rem 1rem', color: '#94a3b8' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>💸</div>
+          <p style={{ margin: 0 }}>Bado haujapokea malipo.<br />Kamilisha safari ili upate.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+          {credits.map(t => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.75rem', background: '#fff', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+              <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>⬆️</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.description}</div>
+                <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#16a34a' }}>+TSh {t.amount.toLocaleString()}</div>
+                <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Sal: {t.balance_after.toLocaleString()}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -2886,9 +3007,10 @@ function getNavItems(role: string, _unreadCount: number): NavItem[] {
   }
   if (role === 'DRIVER') {
     return [
-      { tab: 'home',          label: 'Home',         icon: <IconHome />     },
-      { tab: 'offer-history', label: 'My Trips',     icon: <IconList />     },
-      { tab: 'settings',      label: 'Settings',     icon: <IconSettings /> },
+      { tab: 'home',          label: 'Home',     icon: <IconHome />     },
+      { tab: 'offer-history', label: 'Safari',   icon: <IconList />     },
+      { tab: 'wallet',        label: 'Mkoba',    icon: <span style={{fontSize:'1.1rem'}}>💰</span> },
+      { tab: 'settings',      label: 'Mipangilio', icon: <IconSettings /> },
     ];
   }
   return [
@@ -3079,6 +3201,7 @@ export default function Dashboard() {
           {activeTab === 'my-trips'      && isRider  && <MyTripsTab      setActiveTab={handleTabChange} />}
           {activeTab === 'offer-history' && isDriver && <OfferHistoryTab />}
           {activeTab === 'wallet'        && isRider  && <WalletTab />}
+          {activeTab === 'wallet'        && isDriver && <DriverWalletTab />}
           {activeTab === 'notifications' && <NotificationsTab onRead={() => setUnreadCount(0)} />}
         </div>
       </div>
