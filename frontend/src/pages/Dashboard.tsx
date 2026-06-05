@@ -1044,6 +1044,8 @@ function DriverHomePanel() {
   const [msg, setMsg]                     = useState('');
   const [msgType, setMsgType]             = useState<'success' | 'error'>('success');
   const [error, setError]                 = useState('');
+  const [completedTripId, setCompletedTripId] = useState<number | null>(null);
+  const [driverPayToast, setDriverPayToast]   = useState<string | null>(null);
 
   const { publish: publishStatus } = useMqtt([], useCallback(() => {}, []));
 
@@ -1139,6 +1141,20 @@ function DriverHomePanel() {
     return () => window.removeEventListener('driver-trip-accepted', handler);
   }, [refreshDriver]);
 
+  // Panel-level payment subscription — survives CurrentTripCard unmount
+  const payTopic = completedTripId ? [`rides/${completedTripId}/payment`] : [];
+  useMqtt(payTopic, useCallback((event: MqttEvent) => {
+    if (event.event_type === 'PAYMENT_DONE') {
+      const p = event.payload as Record<string, unknown>;
+      if (String(p.for_role) === 'DRIVER') {
+        const amount = Number(p.amount);
+        setDriverPayToast(`💰 TSh ${amount.toLocaleString()} imeingizwa mkobani`);
+        setTimeout(() => setDriverPayToast(null), 7000);
+        setTimeout(() => setCompletedTripId(null), 10000);
+      }
+    }
+  }, [])); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggle = async () => {
     if (!driver || driver.status === 'BUSY') return;
     setToggling(true); setError('');
@@ -1187,6 +1203,7 @@ function DriverHomePanel() {
       const { data } = await driverApi.post<Trip>(`/driver/trips/${currentTrip.id}/${action}`);
       if (action === 'complete') {
         await publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_COMPLETED', { trip_id: currentTrip.id, driver_id: driver?.id });
+        setCompletedTripId(currentTrip.id);
         setCurrentTrip(null);
         setMsg('Safari imekamilika! Uko tayari tena.');
         setMsgType('success');
@@ -1243,6 +1260,18 @@ function DriverHomePanel() {
 
       {error && <div className="driver-panel-msg"><Alert type="error" message={error} /></div>}
       {msg   && <div className="driver-panel-msg"><Alert type={msgType} message={msg} /></div>}
+
+      {driverPayToast && (
+        <div style={{
+          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          background: 'linear-gradient(135deg, #1a3a1a, #2d6a2d)', color: '#fff', borderRadius: 12,
+          padding: '0.65rem 1.1rem', fontSize: '0.95rem', fontWeight: 700, zIndex: 2000,
+          maxWidth: '90vw', boxShadow: '0 4px 20px rgba(0,100,0,0.45)',
+          display: 'flex', alignItems: 'center', gap: '0.5rem',
+        }}>
+          {driverPayToast}
+        </div>
+      )}
 
       {/* OFFLINE */}
       {isOffline && (
