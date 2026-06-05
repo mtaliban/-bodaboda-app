@@ -239,6 +239,22 @@ async def get_wallet_transactions(limit: int = 200, db: AsyncSession = Depends(g
     return [dict(r) for r in result.mappings()]
 
 
+# ── Admin Earnings (10% platform cut from each trip) ─────────────────────────
+@router.get("/earnings", dependencies=[Depends(verify_admin_token)])
+async def get_admin_earnings(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(text("""
+        SELECT ae.id, ae.trip_id, ae.amount::float AS amount, ae.created_at,
+               t.pickup_address, t.destination_address, t.fare_tzs
+        FROM admin_earnings ae
+        LEFT JOIN trips t ON t.id = ae.trip_id
+        ORDER BY ae.created_at DESC
+        LIMIT 500
+    """))
+    rows = [dict(r) for r in result.mappings()]
+    total = sum(r['amount'] for r in rows)
+    return {"total": round(total, 2), "count": len(rows), "earnings": rows}
+
+
 # ── Virtual Cards (all users) ─────────────────────────────────────────────────
 @router.get("/wallet/cards", dependencies=[Depends(verify_admin_token)])
 async def get_virtual_cards(db: AsyncSession = Depends(get_db)):

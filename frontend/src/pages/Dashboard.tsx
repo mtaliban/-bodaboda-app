@@ -2901,7 +2901,7 @@ function WalletTab() {
               <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>⬇️</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.description}</div>
-                <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
+                <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{fmtTxDate(t.created_at)}</div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#dc2626' }}>-TSh {t.amount.toLocaleString()}</div>
@@ -2917,18 +2917,39 @@ function WalletTab() {
 
 // ── Driver Wallet Tab ─────────────────────────────────────────────────
 
+function fmtTxDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('sw-TZ', { day: 'numeric', month: 'short', year: 'numeric' })
+    + ' · ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
 function DriverWalletTab() {
   const { user } = useAuth();
   const [data, setData]     = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr]       = useState('');
+  const [card, setCard]     = useState<CardData | 'loading'>('loading');
+  const [cardErr, setCardErr] = useState('');
+  const [getting, setGetting] = useState(false);
 
   useEffect(() => {
     api.get<WalletData>('/wallet')
       .then(({ data: d }) => setData(d))
       .catch(e => setErr(extractApiError(e)))
       .finally(() => setLoading(false));
+    api.get<CardData>('/wallet/card')
+      .then(({ data: c }) => setCard(c))
+      .catch(() => setCard(null));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const getCard = async () => {
+    setCardErr(''); setGetting(true);
+    try {
+      const { data: c } = await api.post<CardData>('/wallet/card');
+      setCard(c);
+    } catch (e) { setCardErr(extractApiError(e)); }
+    finally { setGetting(false); }
+  };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '3rem' }}><div className="spinner" /></div>;
   if (err) return <div style={{ padding: '1rem' }}><Alert type="error" message={err} /></div>;
@@ -2965,6 +2986,14 @@ function DriverWalletTab() {
         </div>
       </div>
 
+      {/* Virtual card */}
+      {card !== 'loading' && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          {cardErr && <Alert type="error" message={cardErr} />}
+          <VirtualCardDisplay card={card} userName={user?.full_name ?? ''} onGet={getCard} getting={getting} />
+        </div>
+      )}
+
       {/* Earnings history */}
       <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.6rem' }}>Historia ya Mapato (90%)</div>
       {credits.length === 0 ? (
@@ -2979,7 +3008,7 @@ function DriverWalletTab() {
               <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>⬆️</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.description}</div>
-                <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
+                <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{fmtTxDate(t.created_at)}</div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#16a34a' }}>+TSh {t.amount.toLocaleString()}</div>
