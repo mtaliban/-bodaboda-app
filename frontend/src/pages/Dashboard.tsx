@@ -2837,27 +2837,27 @@ function WalletTab() {
         </div>
       )}
 
-      {/* 4. Transaction history */}
-      <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.5rem' }}>Historia ya Malipo</div>
-      {loading ? (
-        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '1.5rem 0', fontSize: '0.85rem' }}>Inapakia…</div>
-      ) : txns.length === 0 ? (
-        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '1.5rem 0', fontSize: '0.85rem' }}>Hakuna shughuli bado.</div>
-      ) : txns.map(t => (
-        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 0', borderBottom: '1px solid #f3f4f6' }}>
-          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{t.type === 'CREDIT' ? '⬆️' : '⬇️'}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.description}</div>
-            <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
-          </div>
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.85rem', color: t.type === 'CREDIT' ? '#16a34a' : '#dc2626' }}>
-              {t.type === 'CREDIT' ? '+' : '-'}TSh {t.amount.toLocaleString()}
+      {/* 4. Debit history (fare deductions only) */}
+      {!loading && txns.filter(t => t.type === 'DEBIT').length > 0 && (
+        <>
+          <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.5rem' }}>Safari Zilizolipwa</div>
+          {txns.filter(t => t.type === 'DEBIT').map(t => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 0', borderBottom: '1px solid #f3f4f6' }}>
+              <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>⬇️</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.description}</div>
+                <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>{new Date(t.created_at).toLocaleString()}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#dc2626' }}>
+                  -TSh {t.amount.toLocaleString()}
+                </div>
+                <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Bal: {t.balance_after.toLocaleString()}</div>
+              </div>
             </div>
-            <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Bal: {t.balance_after.toLocaleString()}</div>
-          </div>
-        </div>
-      ))}
+          ))}
+        </>
+      )}
     </div>
   );
 }
