@@ -238,8 +238,12 @@ async def complete_trip(
     driver.current_trip_id = None
     driver.total_trips += 1
 
-    # Deduct fare from rider's wallet and create notification
-    fare = _calc_fare(trip)
+    # Use stored fare or recalculate
+    fare = Decimal(str(trip.fare_tzs if trip.fare_tzs else _calc_fare(trip)))
+    admin_cut = (fare * Decimal("0.10")).to_integral_value()
+    driver_cut = fare - admin_cut
+
+    # ── Deduct full fare from rider wallet ──
     rp_result = await db.execute(select(RiderProfile).where(RiderProfile.id == trip.rider_id))
     rp = rp_result.scalar_one_or_none()
     rider_user: User | None = None
@@ -249,13 +253,13 @@ async def complete_trip(
 
     if rider_user is not None:
         old_bal = Decimal(str(rider_user.wallet_balance)) if rider_user.wallet_balance is not None else Decimal('0')
-        new_bal = max(Decimal('0'), old_bal - Decimal(str(fare)))
+        new_bal = max(Decimal('0'), old_bal - fare)
         rider_user.wallet_balance = new_bal
         desc = f"Safari #{trip.id} — {(trip.pickup_address or '')[:80]} → {(trip.destination_address or '')[:80]}"
         db.add(WalletTransaction(
             user_id=rider_user.id,
             type="DEBIT",
-            amount=Decimal(str(fare)),
+            amount=fare,
             balance_after=new_bal,
             trip_id=trip.id,
             description=desc[:200],
@@ -264,7 +268,31 @@ async def complete_trip(
             recipient_role="RIDER",
             recipient_profile_id=trip.rider_id,
             title="Safari imekamilika",
-            message=f"TSh {fare:,} imekatwa kwa safari yako. Salio: TSh {int(new_bal):,}",
+            message=f"TSh {int(fare):,} imekatwa kwa safari yako. Salio: TSh {int(new_bal):,}",
+            type="TRIP_COMPLETED",
+            related_trip_id=trip.id,
+        ))
+
+    # ── Credit 90% to driver wallet ──
+    driver_user_result = await db.execute(select(User).where(User.id == driver.user_id))
+    driver_user = driver_user_result.scalar_one_or_none()
+    if driver_user is not None:
+        d_old = Decimal(str(driver_user.wallet_balance)) if driver_user.wallet_balance is not None else Decimal('0')
+        d_new = d_old + driver_cut
+        driver_user.wallet_balance = d_new
+        db.add(WalletTransaction(
+            user_id=driver_user.id,
+            type="CREDIT",
+            amount=driver_cut,
+            balance_after=d_new,
+            trip_id=trip.id,
+            description=f"Mapato safari #{trip.id} (90%) — {(trip.pickup_address or '')[:60]} → {(trip.destination_address or '')[:60]}",
+        ))
+        db.add(Notification(
+            recipient_role="DRIVER",
+            recipient_profile_id=driver.driver_profile_id,
+            title="Umepata malipo",
+            message=f"TSh {int(driver_cut):,} imeingizwa kwenye mkoba wako.",
             type="TRIP_COMPLETED",
             related_trip_id=trip.id,
         ))

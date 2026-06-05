@@ -46,5 +46,6 @@ class Trip(Base):
     ride_type: Mapped[RideType] = mapped_column(SAEnum(RideType, name="ridetype"), nullable=False, default=RideType.BODA)
     payment_method: Mapped[PaymentMethod] = mapped_column(SAEnum(PaymentMethod, name="paymentmethod"), nullable=False, default=PaymentMethod.CASH)
     status: Mapped[TripStatus] = mapped_column(SAEnum(TripStatus, name="tripstatus"), nullable=False, default=TripStatus.SEARCHING_DRIVER)
+    fare_tzs: Mapped[Optional[int]] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=_utcnow, nullable=False)
