@@ -69,7 +69,7 @@ interface ChatMessage {
 
 type Tab = 'dashboard' | 'trips' | 'wallet';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Standalone helpers (defined outside component — no re-creation issue) ──────
 
 function StatusDot({ status }: { status: string }) {
   const cfg: Record<string, { color: string; label: string }> = {
@@ -81,8 +81,7 @@ function StatusDot({ status }: { status: string }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
       <span style={{
-        width: 10, height: 10, borderRadius: '50%',
-        background: s.color, display: 'inline-block',
+        width: 10, height: 10, borderRadius: '50%', background: s.color, display: 'inline-block',
         boxShadow: status === 'AVAILABLE' ? `0 0 0 3px ${s.color}33` : undefined,
       }} />
       {s.label}
@@ -95,14 +94,10 @@ function countdown(expiresAt: string): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 }
 
-function fmtMoney(v: number) {
-  return `TSh ${v.toLocaleString('en-TZ')}`;
-}
+function fmtMoney(v: number) { return `TSh ${v.toLocaleString('en-TZ')}`; }
 
 function fmtDate(s: string) {
-  return new Date(s).toLocaleDateString('sw-TZ', {
-    day: '2-digit', month: 'short', year: 'numeric',
-  });
+  return new Date(s).toLocaleDateString('sw-TZ', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 function fmtDateTime(s: string) {
@@ -110,13 +105,13 @@ function fmtDateTime(s: string) {
   return `${d.toLocaleDateString('sw-TZ', { day: '2-digit', month: 'short', year: 'numeric' })} · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function tripStatusColor(s: string): string {
-  const map: Record<string, string> = {
+function statusColor(s: string) {
+  const m: Record<string, string> = {
     COMPLETED: '#16a34a', CANCELLED: '#dc2626', IN_PROGRESS: '#ea580c',
-    SEARCHING_DRIVER: '#ca8a04', DRIVER_ASSIGNED: '#2563eb', DRIVER_ARRIVED: '#7c3aed',
-    NO_DRIVER_AVAILABLE: '#dc2626',
+    SEARCHING_DRIVER: '#ca8a04', DRIVER_ASSIGNED: '#2563eb',
+    DRIVER_ARRIVED: '#7c3aed', NO_DRIVER_AVAILABLE: '#dc2626',
   };
-  return map[s] ?? '#64748b';
+  return m[s] ?? '#64748b';
 }
 
 async function reverseGeocode(lat: number, lng: number): Promise<string> {
@@ -126,7 +121,10 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
       { headers: { 'Accept-Language': 'sw,en' } }
     );
     if (!res.ok) return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-    const data = await res.json() as { display_name?: string; address?: { road?: string; suburb?: string; city?: string; town?: string; village?: string } };
+    const data = await res.json() as {
+      display_name?: string;
+      address?: { road?: string; suburb?: string; city?: string; town?: string; village?: string };
+    };
     const a = data.address;
     if (a) {
       const parts = [a.road, a.suburb ?? a.village ?? a.town ?? a.city].filter(Boolean);
@@ -138,33 +136,24 @@ async function reverseGeocode(lat: number, lng: number): Promise<string> {
   }
 }
 
-// ── TabBar ────────────────────────────────────────────────────────────────────
+// ── Tab bar — defined outside so React never re-creates it ────────────────────
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { key: Tab; label: string; icon: string }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: '🏠' },
     { key: 'trips',     label: 'Trips Zangu', icon: '🏍️' },
-    { key: 'wallet',    label: 'Mkoba', icon: '💰' },
+    { key: 'wallet',    label: 'Mkoba Wangu', icon: '💰' },
   ];
   return (
-    <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #e2e8f0', marginBottom: '1rem', overflowX: 'auto' }}>
+    <div style={{ display: 'flex', borderBottom: '2px solid #e2e8f0', marginBottom: '1rem', overflowX: 'auto' }}>
       {tabs.map(t => (
-        <button
-          key={t.key}
-          onClick={() => onChange(t.key)}
-          style={{
-            padding: '0.65rem 1.2rem',
-            border: 'none',
-            borderBottom: active === t.key ? '3px solid #e85d04' : '3px solid transparent',
-            background: 'none',
-            cursor: 'pointer',
-            fontWeight: active === t.key ? 700 : 500,
-            color: active === t.key ? '#e85d04' : '#64748b',
-            fontSize: '0.9rem',
-            whiteSpace: 'nowrap',
-            transition: 'all 0.15s',
-          }}
-        >
+        <button key={t.key} onClick={() => onChange(t.key)} style={{
+          padding: '0.65rem 1.2rem', border: 'none',
+          borderBottom: active === t.key ? '3px solid #e85d04' : '3px solid transparent',
+          background: 'none', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.15s',
+          fontWeight: active === t.key ? 700 : 500,
+          color: active === t.key ? '#e85d04' : '#64748b', fontSize: '0.9rem',
+        }}>
           {t.icon} {t.label}
         </button>
       ))}
@@ -172,55 +161,59 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function DriverDashboard() {
   const { user } = useAuth();
-  const [driver, setDriver] = useState<DriverState | null>(null);
-  const [offer, setOffer] = useState<Offer | null>(null);
-  const [timer, setTimer] = useState('');
-  const [toggling, setToggling] = useState(false);
-  const [acting, setActing] = useState(false);
-  const [error, setError] = useState('');
+
+  const [driver, setDriver]             = useState<DriverState | null>(null);
+  const [offer, setOffer]               = useState<Offer | null>(null);
+  const [timer, setTimer]               = useState('');
+  const [toggling, setToggling]         = useState(false);
+  const [acting, setActing]             = useState(false);
+  const [error, setError]               = useState('');
   const [newRideAlert, setNewRideAlert] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [driverTrips, setDriverTrips] = useState<TripSummary[]>([]);
-  const [tripsLoading, setTripsLoading] = useState(false);
-  const [walletData, setWalletData] = useState<WalletData | null>(null);
-  const [walletLoading, setWalletLoading] = useState(false);
+  const [activeTab, setActiveTab]       = useState<Tab>('dashboard');
   const [locationName, setLocationName] = useState('');
-  const [currentTrip, setCurrentTrip] = useState<TripSummary | null>(null);
+  const [currentTrip, setCurrentTrip]   = useState<TripSummary | null>(null);
+
+  // Trips tab state
+  const [driverTrips, setDriverTrips]   = useState<TripSummary[]>([]);
+  const [tripsLoaded, setTripsLoaded]   = useState(false);
+  const [tripsLoading, setTripsLoading] = useState(false);
+
+  // Wallet tab state
+  const [walletData, setWalletData]     = useState<WalletData | null>(null);
+  const [walletLoaded, setWalletLoaded] = useState(false);
+  const [walletLoading, setWalletLoading] = useState(false);
 
   // Chat state
-  const [chatOpen, setChatOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [chatOpen, setChatOpen]         = useState(false);
+  const [messages, setMessages]         = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput]       = useState('');
+  const messagesEndRef                  = useRef<HTMLDivElement>(null);
 
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── load driver ─────────────────────────────────────────────────────────────
+  // ── Load driver ──────────────────────────────────────────────────────────────
   useEffect(() => {
     api.post('/drivers/sync-me')
       .then(({ data }) => setDriver(data))
       .catch(() => api.get('/drivers/me').then(({ data }) => setDriver(data)))
-      .catch(() => setError('Could not load driver profile.'));
+      .catch(() => setError('Imeshindwa kupakia wasifu wa dereva.'));
   }, []);
 
-  // ── get driver location name from browser GPS ────────────────────────────────
+  // ── GPS location name ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const name = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
-        setLocationName(name);
-      },
-      () => setLocationName(''),
-    );
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const name = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+      setLocationName(name);
+    });
   }, []);
 
-  // ── load current trip when BUSY ──────────────────────────────────────────────
+  // ── Current trip when BUSY ───────────────────────────────────────────────────
   useEffect(() => {
     if (driver?.status === 'BUSY') {
       api.get<TripSummary>('/drivers/current-trip')
@@ -229,19 +222,16 @@ export default function DriverDashboard() {
     } else {
       setCurrentTrip(null);
     }
-  }, [driver?.status]);
+  }, [driver?.status, driver?.current_trip_id]);
 
-  // ── fetch current offer ──────────────────────────────────────────────────────
+  // ── Fetch current offer ──────────────────────────────────────────────────────
   const fetchOffer = useCallback(async () => {
     try {
       const { data } = await api.get<Offer | null>('/drivers/offers/current');
       setOffer(data ?? null);
-    } catch {
-      // no offer
-    }
+    } catch { /* silent */ }
   }, []);
 
-  // ── poll every 8s when AVAILABLE ────────────────────────────────────────────
   useEffect(() => {
     if (driver?.status === 'AVAILABLE') {
       fetchOffer();
@@ -253,7 +243,7 @@ export default function DriverDashboard() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [driver?.status, fetchOffer]);
 
-  // ── offer countdown ──────────────────────────────────────────────────────────
+  // ── Countdown timer ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (offer) {
       setTimer(countdown(offer.expires_at));
@@ -265,30 +255,30 @@ export default function DriverDashboard() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [offer]);
 
-  // ── auto-scroll chat ─────────────────────────────────────────────────────────
+  // ── Load trips (once per session when tab is first opened) ───────────────────
+  useEffect(() => {
+    if (activeTab !== 'trips' || tripsLoaded) return;
+    setTripsLoading(true);
+    api.get<TripSummary[]>('/drivers/trips')
+      .then(({ data }) => { setDriverTrips(data); setTripsLoaded(true); })
+      .catch(() => { setDriverTrips([]); setTripsLoaded(true); })
+      .finally(() => setTripsLoading(false));
+  }, [activeTab, tripsLoaded]);
+
+  // ── Load wallet (once per session when tab is first opened) ──────────────────
+  useEffect(() => {
+    if (activeTab !== 'wallet' || walletLoaded) return;
+    setWalletLoading(true);
+    api.get<WalletData>('/wallet')
+      .then(({ data }) => { setWalletData(data); setWalletLoaded(true); })
+      .catch(() => { setWalletData(null); setWalletLoaded(true); })
+      .finally(() => setWalletLoading(false));
+  }, [activeTab, walletLoaded]);
+
+  // ── Auto-scroll chat ─────────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  // ── load trips tab ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (activeTab !== 'trips') return;
-    setTripsLoading(true);
-    api.get<TripSummary[]>('/drivers/trips')
-      .then(({ data }) => setDriverTrips(data))
-      .catch(() => setDriverTrips([]))
-      .finally(() => setTripsLoading(false));
-  }, [activeTab]);
-
-  // ── load wallet tab ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (activeTab !== 'wallet') return;
-    setWalletLoading(true);
-    api.get<WalletData>('/wallet')
-      .then(({ data }) => setWalletData(data))
-      .catch(() => setWalletData(null))
-      .finally(() => setWalletLoading(false));
-  }, [activeTab]);
 
   // ── MQTT ─────────────────────────────────────────────────────────────────────
   const mqttTopics = ['rides/new', offer ? `rides/${offer.trip_id}/chat` : 'rides/__none__'];
@@ -298,8 +288,7 @@ export default function DriverDashboard() {
       if (p.sender !== 'Driver') {
         setMessages(prev => [...prev, {
           id: Date.now().toString() + Math.random(),
-          sender: p.sender ?? 'Rider',
-          text: String(p.text ?? ''),
+          sender: p.sender ?? 'Rider', text: String(p.text ?? ''),
           time: new Date().toLocaleTimeString(),
         }]);
       }
@@ -310,14 +299,13 @@ export default function DriverDashboard() {
     if (driver?.status === 'AVAILABLE') fetchOffer();
   }, [driver?.status, fetchOffer, offer]));
 
-  // ── send chat ────────────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+
   const sendChat = () => {
     if (!chatInput.trim() || !offer) return;
     setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      sender: 'Driver',
-      text: chatInput.trim(),
-      time: new Date().toLocaleTimeString(),
+      id: Date.now().toString(), sender: 'Driver',
+      text: chatInput.trim(), time: new Date().toLocaleTimeString(),
     }]);
     publish(`rides/${offer.trip_id}/chat`, {
       event_type: 'CHAT_MESSAGE',
@@ -326,79 +314,67 @@ export default function DriverDashboard() {
     setChatInput('');
   };
 
-  // ── toggle online/offline ────────────────────────────────────────────────────
   const toggleOnline = async () => {
     if (!driver || toggling) return;
-    setToggling(true);
-    setError('');
+    setToggling(true); setError('');
     try {
-      const endpoint = driver.status === 'AVAILABLE' ? '/drivers/go-offline' : '/drivers/go-online';
-      const { data } = await api.post<DriverState>(endpoint);
+      const ep = driver.status === 'AVAILABLE' ? '/drivers/go-offline' : '/drivers/go-online';
+      const { data } = await api.post<DriverState>(ep);
       setDriver(data);
     } catch (e: unknown) {
-      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Could not update status.');
-    } finally {
-      setToggling(false);
-    }
+      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Imeshindwa kubadilisha hali.');
+    } finally { setToggling(false); }
   };
 
-  // ── accept offer ─────────────────────────────────────────────────────────────
   const acceptOffer = async () => {
     if (!offer || acting) return;
-    setActing(true);
-    setError('');
+    setActing(true); setError('');
     try {
       const { data } = await api.post(`/drivers/offers/${offer.id}/accept`);
-      setDriver(data.driver);
-      setOffer(null);
+      setDriver(data.driver); setOffer(null);
     } catch (e: unknown) {
-      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Could not accept offer.');
+      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Imeshindwa kukubali.');
       await fetchOffer();
-    } finally {
-      setActing(false);
-    }
+    } finally { setActing(false); }
   };
 
-  // ── decline offer ────────────────────────────────────────────────────────────
   const declineOffer = async () => {
     if (!offer || acting) return;
-    setActing(true);
-    setError('');
+    setActing(true); setError('');
     try {
       await api.post(`/drivers/offers/${offer.id}/decline`);
       setOffer(null);
     } catch (e: unknown) {
-      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Could not decline offer.');
-    } finally {
-      setActing(false);
-    }
+      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Imeshindwa kukataa.');
+    } finally { setActing(false); }
   };
 
-  // ── trip actions ─────────────────────────────────────────────────────────────
-  const doTripAction = async (endpoint: string, label: string) => {
+  const doTripAction = async (endpoint: string) => {
     if (!currentTrip || acting) return;
-    setActing(true);
-    setError('');
+    setActing(true); setError('');
     try {
       const { data } = await api.post<TripSummary>(endpoint);
       setCurrentTrip(data);
       if (data.status === 'COMPLETED' || data.status === 'CANCELLED') {
         const { data: d } = await api.get<DriverState>('/drivers/me');
         setDriver(d);
+        // Refresh wallet after trip completes
+        setWalletLoaded(false);
       }
     } catch (e: unknown) {
-      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? `Could not ${label}.`);
-    } finally {
-      setActing(false);
-    }
+      setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Imeshindwa.');
+    } finally { setActing(false); }
   };
 
-  // ── Loading screen ───────────────────────────────────────────────────────────
+  const refreshTrips = () => { setTripsLoaded(false); };
+  const refreshWallet = () => { setWalletLoaded(false); };
+
+  // ── Loading ───────────────────────────────────────────────────────────────────
   if (!driver) {
     return (
       <div className="loading-screen">
         <div className="spinner spinner-navy" />
-        <p>Loading driver dashboard…</p>
+        <p>Inapakia dashibodi ya dereva…</p>
       </div>
     );
   }
@@ -406,202 +382,61 @@ export default function DriverDashboard() {
   const isOnline = driver.status === 'AVAILABLE';
   const isBusy   = driver.status === 'BUSY';
 
-  // ── Trips tab ────────────────────────────────────────────────────────────────
-  const TripsTab = () => (
-    <div>
-      <h3 style={{ margin: '0 0 1rem', fontSize: '1rem', fontWeight: 700 }}>Safari Zangu</h3>
-      {tripsLoading ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-          <div className="spinner spinner-navy" style={{ margin: '0 auto 0.5rem' }} />
-          Inapakia…
-        </div>
-      ) : driverTrips.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-          <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🏍️</div>
-          Bado hujafanya safari yoyote.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {driverTrips.map(trip => (
-            <div key={trip.id} style={{
-              background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
-              padding: '1rem', borderLeft: `4px solid ${tripStatusColor(trip.status)}`,
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b' }}>
-                    Safari #{trip.id}
-                  </div>
-                  {trip.trip_name && (
-                    <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>{trip.trip_name}</div>
-                  )}
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{
-                    background: `${tripStatusColor(trip.status)}18`,
-                    color: tripStatusColor(trip.status),
-                    padding: '0.15rem 0.5rem', borderRadius: 99,
-                    fontSize: '0.72rem', fontWeight: 700,
-                  }}>{trip.status.replace(/_/g, ' ')}</span>
-                  {trip.fare_tzs && (
-                    <div style={{ fontWeight: 800, color: '#16a34a', fontSize: '0.95rem', marginTop: '0.25rem' }}>
-                      {fmtMoney(Math.round(trip.fare_tzs * 0.9))}
-                      <span style={{ fontWeight: 400, fontSize: '0.72rem', color: '#64748b' }}> (mapato)</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div style={{ marginTop: '0.6rem', fontSize: '0.82rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                <div>📍 <strong>Pickup:</strong> {trip.pickup_address}</div>
-                <div>🏁 <strong>Dest:</strong> {trip.destination_address}</div>
-                <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '0.25rem' }}>
-                  🕐 {fmtDateTime(trip.created_at)}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
-  // ── Wallet tab ───────────────────────────────────────────────────────────────
-  const WalletTab = () => (
-    <div>
-      {walletLoading ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-          <div className="spinner spinner-navy" style={{ margin: '0 auto 0.5rem' }} />
-          Inapakia mkoba…
-        </div>
-      ) : !walletData ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#ef4444' }}>Imeshindwa kupakia mkoba.</div>
-      ) : (
-        <>
-          {/* Balance card */}
-          <div style={{
-            background: 'linear-gradient(135deg, #1e3a5f 0%, #e85d04 100%)',
-            borderRadius: 16, padding: '1.5rem', color: '#fff', marginBottom: '1.25rem',
-          }}>
-            <div style={{ fontSize: '0.85rem', opacity: 0.8, marginBottom: '0.25rem' }}>Salio la Mkoba</div>
-            <div style={{ fontSize: '2.2rem', fontWeight: 800 }}>{fmtMoney(walletData.balance)}</div>
-            <div style={{ fontSize: '0.78rem', opacity: 0.7, marginTop: '0.4rem' }}>
-              {driver.full_name}
-            </div>
-          </div>
-
-          {/* Earnings summary */}
-          {(() => {
-            const credits = walletData.transactions.filter(t => t.type === 'CREDIT');
-            const total = credits.reduce((s, t) => s + t.amount, 0);
-            return (
-              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
-                <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '0.75rem', textAlign: 'center' }}>
-                  <div style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.1rem' }}>{fmtMoney(total)}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>Jumla ya Mapato</div>
-                </div>
-                <div style={{ flex: 1, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '0.75rem', textAlign: 'center' }}>
-                  <div style={{ fontWeight: 800, color: '#2563eb', fontSize: '1.1rem' }}>{credits.length}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>Safari Zilizolipwa</div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* Transaction history */}
-          <h3 style={{ margin: '0 0 0.75rem', fontSize: '0.95rem', fontWeight: 700 }}>Miamala</h3>
-          {walletData.transactions.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '1.5rem', color: '#94a3b8' }}>Hakuna miamala bado.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {walletData.transactions.map(txn => (
-                <div key={txn.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  background: '#fff', border: '1px solid #f1f5f9', borderRadius: 10,
-                  padding: '0.75rem 1rem', gap: '0.5rem',
-                }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {txn.description}
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
-                      {fmtDate(txn.created_at)}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontWeight: 800, color: txn.type === 'CREDIT' ? '#16a34a' : '#ef4444', fontSize: '0.95rem' }}>
-                      {txn.type === 'CREDIT' ? '+' : '-'}{fmtMoney(txn.amount)}
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                      Salio: {fmtMoney(txn.balance_after)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div className="dashboard">
-      {/* Banner */}
+
+      {/* ── Banner ── */}
       <div className="db-banner driver-banner">
         <div className="db-banner-inner">
           <div className="db-welcome">
             <div className="db-avatar">{user?.full_name?.charAt(0).toUpperCase() ?? 'D'}</div>
             <div>
-              <p className="db-greeting">Ready to earn today, Driver 🏍️</p>
+              <p className="db-greeting">Karibu kufanya kazi leo 🏍️</p>
               <h1 className="db-name">{driver.full_name}</h1>
               <div className="db-pills">
-                <span className="db-role-pill">🏍️ DRIVER</span>
+                <span className="db-role-pill">🏍️ DEREVA</span>
                 <span className="db-role-pill" style={{ background: '#1e293b' }}>
                   <StatusDot status={driver.status} />
                 </span>
               </div>
             </div>
           </div>
-
           <div className="db-banner-actions">
             <button
               className={`btn ${isOnline || isBusy ? 'btn-navy' : 'btn-primary'}`}
-              style={{ minWidth: 140 }}
-              onClick={toggleOnline}
+              style={{ minWidth: 140 }} onClick={toggleOnline}
               disabled={toggling || isBusy}
-              title={isBusy ? 'Cannot go offline while on a trip' : undefined}
+              title={isBusy ? 'Huwezi kwenda offline ukiwa na safari' : undefined}
             >
-              {toggling ? (
-                <><span className="btn-spinner" /> Updating…</>
-              ) : isOnline ? '🔴 Go Offline' : '🟢 Go Online'}
+              {toggling ? <><span className="btn-spinner" /> Inabadilika…</> : isOnline ? '🔴 Nenda Offline' : '🟢 Nenda Online'}
             </button>
           </div>
         </div>
       </div>
 
+      {/* ── Body ── */}
       <div className="db-body">
         {error && <Alert type="error" message={error} />}
 
-        {/* New ride toast */}
         {newRideAlert && !offer && (
           <div className="info-card" style={{ borderLeft: '4px solid #e85d04', background: '#fff7ed' }}>
-            <strong>🏍️ New ride request nearby!</strong>
-            <span style={{ marginLeft: '0.5rem', color: '#888', fontSize: '0.85rem' }}>Checking if assigned to you…</span>
+            <strong>🏍️ Ombi jipya la safari karibu nawe!</strong>
           </div>
         )}
 
-        {/* Tabs (only when not in offer / busy) */}
         <TabBar active={activeTab} onChange={setActiveTab} />
 
-        {/* ── Dashboard Tab ─────────────────────────────────────────────────── */}
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB: DASHBOARD
+        ══════════════════════════════════════════════════════════════════ */}
         {activeTab === 'dashboard' && (
           <>
             {/* Incoming offer */}
             {offer && offer.trip && (
               <div className="info-card" style={{ borderLeft: '4px solid #e85d04' }}>
                 <div className="info-card-head">
-                  <span className="info-card-title">🚨 Incoming Ride Request</span>
+                  <span className="info-card-title">🚨 Ombi la Safari</span>
                   <span style={{ fontWeight: 700, fontSize: '1.1rem', color: timer < '0:30' ? '#ef4444' : '#e85d04' }}>
                     ⏱ {timer}
                   </span>
@@ -610,15 +445,15 @@ export default function DriverDashboard() {
                 {/* Fare preview */}
                 {offer.trip.fare_tzs && (
                   <div style={{
-                    background: '#f0fdf4', border: '1px solid #bbf7d0',
-                    borderRadius: 8, padding: '0.6rem 0.9rem', margin: '0.6rem 0',
+                    background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8,
+                    padding: '0.65rem 1rem', margin: '0.6rem 0',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   }}>
-                    <span style={{ fontSize: '0.82rem', color: '#374151' }}>💰 Bei ya Safari</span>
+                    <span style={{ fontSize: '0.83rem', color: '#374151', fontWeight: 600 }}>💰 Bei ya Safari</span>
                     <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontWeight: 800, color: '#16a34a', fontSize: '1rem' }}>
+                      <div style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.05rem' }}>
                         {fmtMoney(offer.trip.fare_tzs)}
-                      </span>
+                      </div>
                       <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
                         Mapato yako: <strong style={{ color: '#16a34a' }}>{fmtMoney(Math.round(offer.trip.fare_tzs * 0.9))}</strong> (90%)
                       </div>
@@ -628,8 +463,8 @@ export default function DriverDashboard() {
 
                 {(offer.rider_name || offer.rider_phone) && (
                   <div className="info-row" style={{ marginTop: '0.5rem' }}>
-                    <span className="info-label">Rider</span>
-                    <span className="info-value" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <span className="info-label">Abiria</span>
+                    <span className="info-value" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
                       {offer.rider_name && <strong>{offer.rider_name}</strong>}
                       {offer.rider_phone && (
                         <a href={`tel:${offer.rider_phone}`} style={{ color: '#e85d04', fontWeight: 700, textDecoration: 'none' }}>
@@ -641,160 +476,118 @@ export default function DriverDashboard() {
                 )}
 
                 <div className="info-body">
-                  <div className="info-row">
-                    <span className="info-label">Pickup</span>
-                    <span className="info-value">📍 {offer.trip.pickup_address}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Destination</span>
-                    <span className="info-value">🏁 {offer.trip.destination_address}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Ride Type</span>
-                    <span className="info-value">{offer.trip.ride_type}</span>
-                  </div>
-                  <div className="info-row">
-                    <span className="info-label">Payment</span>
-                    <span className="info-value">{offer.trip.payment_method}</span>
-                  </div>
+                  <div className="info-row"><span className="info-label">Pickup</span><span className="info-value">📍 {offer.trip.pickup_address}</span></div>
+                  <div className="info-row"><span className="info-label">Dest</span><span className="info-value">🏁 {offer.trip.destination_address}</span></div>
+                  <div className="info-row"><span className="info-label">Aina</span><span className="info-value">{offer.trip.ride_type}</span></div>
+                  <div className="info-row"><span className="info-label">Malipo</span><span className="info-value">{offer.trip.payment_method}</span></div>
                 </div>
 
                 <DriverTripMapSafe
-                  pickupLat={offer.trip.pickup_lat}
-                  pickupLng={offer.trip.pickup_lng}
+                  pickupLat={offer.trip.pickup_lat} pickupLng={offer.trip.pickup_lng}
                   pickupAddress={offer.trip.pickup_address}
-                  destinationLat={offer.trip.destination_lat}
-                  destinationLng={offer.trip.destination_lng}
+                  destinationLat={offer.trip.destination_lat} destinationLng={offer.trip.destination_lng}
                   destinationAddress={offer.trip.destination_address}
                 />
 
                 <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
                   <button className="btn btn-primary" style={{ flex: 1 }} onClick={acceptOffer} disabled={acting}>
-                    {acting ? <><span className="btn-spinner" /> Accepting…</> : '✅ Accept'}
+                    {acting ? <><span className="btn-spinner" /> …</> : '✅ Kubali'}
                   </button>
                   <button className="btn btn-navy" style={{ flex: 1 }} onClick={declineOffer} disabled={acting}>
-                    {acting ? '…' : '✕ Decline'}
+                    {acting ? '…' : '✕ Kataa'}
                   </button>
-                  <button className="btn btn-navy" style={{ minWidth: 60 }} onClick={() => setChatOpen(true)}>
-                    💬 Chat
-                  </button>
+                  <button className="btn btn-navy" style={{ minWidth: 60 }} onClick={() => setChatOpen(true)}>💬</button>
                 </div>
               </div>
             )}
 
-            {/* Active trip when BUSY */}
+            {/* Active trip (BUSY) */}
             {isBusy && !offer && (
               <div className="info-card" style={{ borderLeft: '4px solid #f59e0b' }}>
                 <div className="info-card-head">
                   <span className="info-card-title">🏍️ Safari Inayoendelea</span>
                   <span style={{ color: '#f59e0b', fontWeight: 700 }}>In Progress</span>
                 </div>
-
                 {currentTrip ? (
                   <>
                     {currentTrip.fare_tzs && (
                       <div style={{
                         background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8,
-                        padding: '0.6rem 0.9rem', margin: '0.6rem 0',
+                        padding: '0.65rem 1rem', margin: '0.5rem 0',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       }}>
-                        <span style={{ fontSize: '0.82rem', color: '#374151' }}>💰 Mapato Yako</span>
-                        <span style={{ fontWeight: 800, color: '#16a34a', fontSize: '1rem' }}>
+                        <span style={{ fontSize: '0.83rem', color: '#374151', fontWeight: 600 }}>💰 Mapato Yako</span>
+                        <span style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.05rem' }}>
                           {fmtMoney(Math.round(currentTrip.fare_tzs * 0.9))}
                         </span>
                       </div>
                     )}
                     <div className="info-body">
-                      <div className="info-row">
-                        <span className="info-label">Pickup</span>
-                        <span className="info-value">📍 {currentTrip.pickup_address}</span>
-                      </div>
-                      <div className="info-row">
-                        <span className="info-label">Destination</span>
-                        <span className="info-value">🏁 {currentTrip.destination_address}</span>
-                      </div>
+                      <div className="info-row"><span className="info-label">Pickup</span><span className="info-value">📍 {currentTrip.pickup_address}</span></div>
+                      <div className="info-row"><span className="info-label">Dest</span><span className="info-value">🏁 {currentTrip.destination_address}</span></div>
                       <div className="info-row">
                         <span className="info-label">Hali</span>
-                        <span className="info-value" style={{ color: tripStatusColor(currentTrip.status), fontWeight: 700 }}>
+                        <span className="info-value" style={{ color: statusColor(currentTrip.status), fontWeight: 700 }}>
                           {currentTrip.status.replace(/_/g, ' ')}
                         </span>
                       </div>
                     </div>
-
-                    {/* Trip action buttons */}
                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
                       {currentTrip.status === 'DRIVER_ASSIGNED' && (
-                        <button className="btn btn-primary btn-sm" onClick={() => doTripAction(`/trips/${currentTrip.id}/driver-arrived`, 'mark arrived')} disabled={acting}>
+                        <button className="btn btn-primary btn-sm" disabled={acting}
+                          onClick={() => doTripAction(`/trips/${currentTrip.id}/driver-arrived`)}>
                           {acting ? '…' : '📍 Nimefika Pickup'}
                         </button>
                       )}
                       {(currentTrip.status === 'DRIVER_ARRIVED' || currentTrip.status === 'DRIVER_ASSIGNED') && (
-                        <button className="btn btn-primary btn-sm" onClick={() => doTripAction(`/trips/${currentTrip.id}/start`, 'start trip')} disabled={acting}>
+                        <button className="btn btn-primary btn-sm" disabled={acting}
+                          onClick={() => doTripAction(`/trips/${currentTrip.id}/start`)}>
                           {acting ? '…' : '▶️ Anza Safari'}
                         </button>
                       )}
                       {currentTrip.status === 'IN_PROGRESS' && (
-                        <button className="btn btn-primary btn-sm" style={{ background: '#16a34a', borderColor: '#16a34a' }}
-                          onClick={() => doTripAction(`/trips/${currentTrip.id}/complete`, 'complete trip')} disabled={acting}>
+                        <button className="btn btn-primary btn-sm"
+                          style={{ background: '#16a34a', borderColor: '#16a34a' }} disabled={acting}
+                          onClick={() => doTripAction(`/trips/${currentTrip.id}/complete`)}>
                           {acting ? '…' : '✅ Maliza Safari'}
                         </button>
                       )}
                       <button className="btn btn-navy btn-sm" onClick={() => setChatOpen(true)}>💬 Chat</button>
                     </div>
-
                     <DriverTripMapSafe
-                      pickupLat={currentTrip.pickup_lat}
-                      pickupLng={currentTrip.pickup_lng}
+                      pickupLat={currentTrip.pickup_lat} pickupLng={currentTrip.pickup_lng}
                       pickupAddress={currentTrip.pickup_address}
-                      destinationLat={currentTrip.destination_lat}
-                      destinationLng={currentTrip.destination_lng}
+                      destinationLat={currentTrip.destination_lat} destinationLng={currentTrip.destination_lng}
                       destinationAddress={currentTrip.destination_address}
                     />
                   </>
                 ) : (
-                  <p style={{ color: '#64748b', margin: '0.5rem 0 0' }}>
-                    Trip #{driver.current_trip_id} inaendelea…
-                  </p>
+                  <p style={{ color: '#64748b', margin: '0.5rem 0 0' }}>Safari #{driver.current_trip_id} inaendelea…</p>
                 )}
               </div>
             )}
 
             {/* Stats */}
             <div className="db-stats">
-              <div className="db-stat">
-                <div className="db-stat-icon driver-stat-icon">⭐</div>
-                <div className="db-stat-info">
-                  <div className="db-stat-val">{driver.rating.toFixed(1)}</div>
-                  <div className="db-stat-lbl">Rating</div>
+              {[
+                { icon: '⭐', val: driver.rating.toFixed(1), lbl: 'Rating' },
+                { icon: '🏍️', val: driver.total_trips,      lbl: 'Safari Zote' },
+                { icon: '🔖', val: driver.plate_number,     lbl: 'Nambari' },
+                { icon: '🛵', val: driver.vehicle_model,    lbl: 'Bodaboda' },
+              ].map(s => (
+                <div key={s.lbl} className="db-stat">
+                  <div className="db-stat-icon driver-stat-icon">{s.icon}</div>
+                  <div className="db-stat-info">
+                    <div className="db-stat-val ellipsis">{s.val}</div>
+                    <div className="db-stat-lbl">{s.lbl}</div>
+                  </div>
                 </div>
-              </div>
-              <div className="db-stat">
-                <div className="db-stat-icon driver-stat-icon">🏍️</div>
-                <div className="db-stat-info">
-                  <div className="db-stat-val">{driver.total_trips}</div>
-                  <div className="db-stat-lbl">Safari Zote</div>
-                </div>
-              </div>
-              <div className="db-stat">
-                <div className="db-stat-icon driver-stat-icon">🔖</div>
-                <div className="db-stat-info">
-                  <div className="db-stat-val">{driver.plate_number}</div>
-                  <div className="db-stat-lbl">Nambari</div>
-                </div>
-              </div>
-              <div className="db-stat">
-                <div className="db-stat-icon driver-stat-icon">🛵</div>
-                <div className="db-stat-info">
-                  <div className="db-stat-val ellipsis">{driver.vehicle_model}</div>
-                  <div className="db-stat-lbl">Bodaboda</div>
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Current location */}
             {locationName && (
               <div className="info-card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ fontSize: '1.1rem' }}>📍</span>
+                <span style={{ fontSize: '1.2rem' }}>📍</span>
                 <div>
                   <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600 }}>Mahali Ulipo Sasa</div>
                   <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#1e293b' }}>{locationName}</div>
@@ -802,70 +595,213 @@ export default function DriverDashboard() {
               </div>
             )}
 
-            {/* Status guidance */}
             {!isOnline && !isBusy && (
               <div className="info-card" style={{ textAlign: 'center', padding: '2rem' }}>
                 <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🔴</div>
                 <h3 style={{ margin: '0 0 0.5rem' }}>Uko Offline</h3>
-                <p style={{ color: '#64748b', margin: '0 0 1rem' }}>
-                  Bonyeza <strong>Go Online</strong> ili uanze kupokea maombi ya safari.
-                </p>
+                <p style={{ color: '#64748b', margin: '0 0 1rem' }}>Bonyeza <strong>Nenda Online</strong> ili uanze kupokea maombi.</p>
                 <button className="btn btn-primary" onClick={toggleOnline} disabled={toggling}>
-                  {toggling ? <><span className="btn-spinner" /> Connecting…</> : '🟢 Go Online Sasa'}
+                  {toggling ? <><span className="btn-spinner" /> Inaunganisha…</> : '🟢 Nenda Online Sasa'}
                 </button>
               </div>
             )}
-
             {isOnline && !offer && (
               <div className="info-card" style={{ textAlign: 'center', padding: '2rem' }}>
                 <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🟢</div>
                 <h3 style={{ margin: '0 0 0.5rem' }}>Uko Online</h3>
-                <p style={{ color: '#64748b', margin: 0 }}>
-                  Unasubiri maombi ya safari… Utaarifiwa mara moja kupitia MQTT.
-                </p>
+                <p style={{ color: '#64748b', margin: 0 }}>Unasubiri maombi… Utaarifiwa mara moja.</p>
               </div>
             )}
           </>
         )}
 
-        {/* ── Trips Tab ──────────────────────────────────────────────────────── */}
-        {activeTab === 'trips' && <TripsTab />}
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB: TRIPS ZANGU
+        ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'trips' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Safari Zangu</h3>
+              <button onClick={refreshTrips} className="btn btn-navy btn-sm" disabled={tripsLoading}>
+                {tripsLoading ? <span className="btn-spinner" /> : '🔄 Reload'}
+              </button>
+            </div>
 
-        {/* ── Wallet Tab ─────────────────────────────────────────────────────── */}
-        {activeTab === 'wallet' && <WalletTab />}
+            {tripsLoading ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                <div className="spinner spinner-navy" style={{ margin: '0 auto 0.75rem' }} />
+                Inapakia safari…
+              </div>
+            ) : driverTrips.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🏍️</div>
+                <p style={{ margin: 0 }}>Bado hujafanya safari yoyote.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {driverTrips.map(trip => (
+                  <div key={trip.id} style={{
+                    background: '#fff', border: '1px solid #e2e8f0',
+                    borderLeft: `4px solid ${statusColor(trip.status)}`, borderRadius: 12, padding: '1rem',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>Safari #{trip.id}</div>
+                        {trip.trip_name && <div style={{ fontSize: '0.73rem', color: '#64748b', marginTop: 1 }}>{trip.trip_name}</div>}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{
+                          background: `${statusColor(trip.status)}15`, color: statusColor(trip.status),
+                          padding: '0.15rem 0.55rem', borderRadius: 99, fontSize: '0.72rem', fontWeight: 700,
+                        }}>
+                          {trip.status.replace(/_/g, ' ')}
+                        </span>
+                        {trip.fare_tzs && trip.status === 'COMPLETED' && (
+                          <div style={{ fontWeight: 800, color: '#16a34a', fontSize: '0.95rem', marginTop: '0.2rem' }}>
+                            +{fmtMoney(Math.round(trip.fare_tzs * 0.9))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ marginTop: '0.6rem', fontSize: '0.82rem', color: '#475569', display: 'flex', flexDirection: 'column', gap: '0.18rem' }}>
+                      <div>📍 {trip.pickup_address}</div>
+                      <div>🏁 {trip.destination_address}</div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.76rem', marginTop: '0.25rem' }}>
+                        🕐 {fmtDateTime(trip.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════
+            TAB: MKOBA WANGU
+        ══════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'wallet' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Mkoba Wangu</h3>
+              <button onClick={refreshWallet} className="btn btn-navy btn-sm" disabled={walletLoading}>
+                {walletLoading ? <span className="btn-spinner" /> : '🔄 Reload'}
+              </button>
+            </div>
+
+            {walletLoading ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                <div className="spinner spinner-navy" style={{ margin: '0 auto 0.75rem' }} />
+                Inapakia mkoba…
+              </div>
+            ) : !walletData ? (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#ef4444' }}>
+                Imeshindwa kupakia mkoba. <button onClick={refreshWallet} className="btn btn-navy btn-sm" style={{ marginLeft: '0.5rem' }}>Jaribu tena</button>
+              </div>
+            ) : (
+              <>
+                {/* Balance card */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #1e3a5f 0%, #e85d04 100%)',
+                  borderRadius: 16, padding: '1.5rem', color: '#fff', marginBottom: '1rem',
+                }}>
+                  <div style={{ fontSize: '0.82rem', opacity: 0.75, marginBottom: '0.25rem' }}>Salio la Mkoba</div>
+                  <div style={{ fontSize: '2.2rem', fontWeight: 800, letterSpacing: '-0.5px' }}>
+                    {fmtMoney(walletData.balance)}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', opacity: 0.65, marginTop: '0.4rem' }}>{driver.full_name}</div>
+                </div>
+
+                {/* Summary cards */}
+                {(() => {
+                  const credits = walletData.transactions.filter(t => t.type === 'CREDIT');
+                  const totalEarned = credits.reduce((s, t) => s + t.amount, 0);
+                  return (
+                    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+                      <div style={{ flex: 1, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '0.8rem', textAlign: 'center' }}>
+                        <div style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.05rem' }}>{fmtMoney(totalEarned)}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>Jumla Mapato</div>
+                      </div>
+                      <div style={{ flex: 1, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '0.8rem', textAlign: 'center' }}>
+                        <div style={{ fontWeight: 800, color: '#2563eb', fontSize: '1.05rem' }}>{credits.length}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>Safari Zilizolipwa</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Transaction list */}
+                <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.88rem', fontWeight: 700, color: '#374151' }}>Miamala Yote</h4>
+
+                {walletData.transactions.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                    <div style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>💸</div>
+                    Hakuna miamala bado.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                    {walletData.transactions.map(txn => (
+                      <div key={txn.id} style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        background: '#fff', border: '1px solid #f1f5f9', borderRadius: 10, padding: '0.75rem 1rem', gap: '0.5rem',
+                      }}>
+                        <div style={{
+                          width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
+                          background: txn.type === 'CREDIT' ? '#f0fdf4' : '#fef2f2',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
+                        }}>
+                          {txn.type === 'CREDIT' ? '⬆️' : '⬇️'}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {txn.description}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: 2 }}>
+                            {fmtDate(txn.created_at)}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontWeight: 800, color: txn.type === 'CREDIT' ? '#16a34a' : '#ef4444', fontSize: '0.95rem' }}>
+                            {txn.type === 'CREDIT' ? '+' : '-'}{fmtMoney(txn.amount)}
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Salio: {fmtMoney(txn.balance_after)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Chat backdrop */}
+      {/* ── Chat backdrop ── */}
       {chatOpen && (
         <div onClick={() => setChatOpen(false)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 999 }} />
       )}
 
-      {/* Chat panel */}
+      {/* ── Chat slide panel ── */}
       <div style={{
         position: 'fixed', top: 0, right: chatOpen ? 0 : '-100%',
-        width: 'min(340px, 100vw)', height: '100vh',
-        background: '#fff', boxShadow: '-4px 0 24px rgba(0,0,0,0.18)',
-        transition: 'right 0.3s ease', zIndex: 1000,
-        display: 'flex', flexDirection: 'column',
+        width: 'min(340px, 100vw)', height: '100vh', background: '#fff',
+        boxShadow: '-4px 0 24px rgba(0,0,0,0.18)', transition: 'right 0.3s ease',
+        zIndex: 1000, display: 'flex', flexDirection: 'column',
       }}>
         <div style={{ padding: '1rem', background: '#1e3a5f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>💬 Chat na {offer?.rider_name ?? currentTrip ? 'Rider' : 'Rider'}</span>
-          <button onClick={() => setChatOpen(false)}
-            style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.3rem', cursor: 'pointer' }}>×</button>
+          <span>💬 Chat na {offer?.rider_name ?? 'Abiria'}</span>
+          <button onClick={() => setChatOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '1.3rem', cursor: 'pointer' }}>×</button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {messages.length === 0 && (
-            <p style={{ color: '#94a3b8', textAlign: 'center', marginTop: '2rem' }}>Hakuna ujumbe bado</p>
-          )}
+          {messages.length === 0 && <p style={{ color: '#94a3b8', textAlign: 'center', marginTop: '2rem' }}>Hakuna ujumbe bado</p>}
           {messages.map(m => (
             <div key={m.id} style={{
               alignSelf: m.sender === 'Driver' ? 'flex-end' : 'flex-start',
               background: m.sender === 'Driver' ? '#e85d04' : '#f1f5f9',
               color: m.sender === 'Driver' ? '#fff' : '#1e293b',
-              padding: '0.5rem 0.75rem', maxWidth: '80%',
+              padding: '0.5rem 0.75rem', maxWidth: '80%', fontSize: '0.9rem',
               borderRadius: m.sender === 'Driver' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
-              fontSize: '0.9rem',
             }}>
               <div>{m.text}</div>
               <div style={{ fontSize: '0.7rem', opacity: 0.7, marginTop: '0.2rem' }}>{m.time}</div>
@@ -874,13 +810,9 @@ export default function DriverDashboard() {
           <div ref={messagesEndRef} />
         </div>
         <div style={{ padding: '0.75rem', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem' }}>
-          <input
-            type="text" value={chatInput}
-            onChange={e => setChatInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && sendChat()}
-            placeholder="Andika ujumbe…"
-            style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem' }}
-          />
+          <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && sendChat()} placeholder="Andika ujumbe…"
+            style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem' }} />
           <button onClick={sendChat} className="btn btn-primary btn-sm">Tuma</button>
         </div>
       </div>

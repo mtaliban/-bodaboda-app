@@ -71,22 +71,29 @@ jobs:
             cd /opt/bodaboda
             git pull origin main
 
-            docker stop \$(docker ps -q) 2>/dev/null || true
-            docker rm \$(docker ps -aq) 2>/dev/null || true
-            docker system prune -af --volumes 2>/dev/null || true
-
+            # Pull latest images (NEVER prune volumes — that deletes the database)
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
+            docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-admin:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
 
-            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d
+            # Remove only stopped containers and unused images (keep volumes = keep DB)
+            docker container prune -f 2>/dev/null || true
+            docker image prune -f 2>/dev/null || true
 
-            sleep 60
+            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d --remove-orphans
+
+            # Run database migrations before health checks
+            sleep 10
+            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose exec -T auth_service alembic upgrade head
+
+            sleep 30
 
             curl -sf http://localhost:8001/health && echo "Auth OK" || (echo "Auth FAILED" && exit 1)
             curl -sf http://localhost:8002/health && echo "Driver OK" || (echo "Driver FAILED" && exit 1)
+            curl -sf http://localhost:8003/health && echo "Admin OK" || (echo "Admin FAILED" && exit 1)
 
-            echo "Staging passed!"
+            echo "Deploy complete!"
           ENDSSH
 
   deploy-production:
