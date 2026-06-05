@@ -309,7 +309,8 @@ function DriverLiveMap({ trip }: { trip: Trip }) {
 // ── 5-Step Tracking Progress Bar ─────────────────────────────────────
 const TRACK_STEPS = ['Received','Accepted','On the way','Arriving','Completed'];
 
-function getTrackIdx(status: string): number {
+function getTrackIdx(status: string, approaching = false): number {
+  if (approaching) return 3;
   const m: Record<string,number> = {
     SEARCHING_DRIVER:    0,
     DRIVER_ASSIGNED:     1,
@@ -322,8 +323,8 @@ function getTrackIdx(status: string): number {
   return m[status] ?? 0;
 }
 
-function TrackSteps({ status }: { status: string }) {
-  const activeIdx = getTrackIdx(status);
+function TrackSteps({ status, approaching = false }: { status: string; approaching?: boolean }) {
+  const activeIdx = getTrackIdx(status, approaching);
   return (
     <div className="track-steps">
       {TRACK_STEPS.map((label, i) => (
@@ -337,6 +338,20 @@ function TrackSteps({ status }: { status: string }) {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Pagination helper ─────────────────────────────────────────────────
+const PAGE_SIZE = 10;
+function Paginator({ total, page, onPage }: { total: number; page: number; onPage: (p: number) => void }) {
+  const pages = Math.ceil(total / PAGE_SIZE);
+  if (pages <= 1) return null;
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem', margin: '0.75rem 0 0.25rem' }}>
+      <button className="btn btn-ghost btn-sm" onClick={() => onPage(page - 1)} disabled={page === 0} style={{ minWidth: 70 }}>← Nyuma</button>
+      <span style={{ fontSize: '0.82rem', color: '#64748b' }}>{page + 1} / {pages}</span>
+      <button className="btn btn-ghost btn-sm" onClick={() => onPage(page + 1)} disabled={page >= pages - 1} style={{ minWidth: 70 }}>Mbele →</button>
     </div>
   );
 }
@@ -1208,6 +1223,7 @@ function DriverHomePanel() {
         setCurrentTrip(null);
         setMsg('Safari imekamilika! Uko tayari tena.');
         setMsgType('success');
+        setTimeout(() => setMsg(''), 5000);
         await refreshDriver();
       } else {
         await publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_STARTED', { trip_id: currentTrip.id, driver_id: driver?.id });
@@ -2099,7 +2115,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
       } catch {
         setTrip(prev => ({ ...prev, status: 'NO_DRIVER_AVAILABLE' }));
       }
-    }, 30000);
+    }, 10000);
     return () => clearTimeout(timer);
   }, [trip.id, trip.status]);
 
@@ -2336,7 +2352,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
         )}
 
         {/* 5-step progress bar */}
-        <TrackSteps status={trip.status} />
+        <TrackSteps status={trip.status} approaching={approaching} />
 
         {/* Trip route summary */}
         <div className="tracking-route">
@@ -2619,7 +2635,9 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
   const canCancel = (status: string) =>
     ['SEARCHING_DRIVER', 'NO_DRIVER_AVAILABLE'].includes(status);
 
+  const [tripsPage, setTripsPage] = useState(0);
   const sorted = [...trips].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const pagedTrips = sorted.slice(tripsPage * PAGE_SIZE, (tripsPage + 1) * PAGE_SIZE);
   const chatTrip = chatTripId != null ? sorted.find(t => t.id === chatTripId) : null;
 
   if (chatTrip) {
@@ -2649,7 +2667,7 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
 
       {!isLoading && sorted.length > 0 && (
         <div className="trip-list">
-          {sorted.map(trip => (
+          {pagedTrips.map(trip => (
             <div key={trip.id} className={`trip-card-h tc-s-${trip.status.toLowerCase()}`}>
               {/* Left accent bar based on status */}
               <div className="tch-accent" />
@@ -2684,6 +2702,7 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
           ))}
         </div>
       )}
+      <Paginator total={sorted.length} page={tripsPage} onPage={setTripsPage} />
     </div>
   );
 }
@@ -2704,7 +2723,9 @@ function OfferHistoryTab() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  const [offerPage, setOfferPage] = useState(0);
   const sorted = [...trips].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const pagedOffers = sorted.slice(offerPage * PAGE_SIZE, (offerPage + 1) * PAGE_SIZE);
   const chatTrip = chatTripId != null ? sorted.find(t => t.id === chatTripId) : null;
 
   if (chatTrip) {
@@ -2733,7 +2754,7 @@ function OfferHistoryTab() {
 
       {!isLoading && sorted.length > 0 && (
         <div className="trip-list">
-          {sorted.map(trip => (
+          {pagedOffers.map(trip => (
             <div key={trip.id} className={`trip-card-h tc-s-${trip.status.toLowerCase()}`}>
               <div className="tch-accent" />
               <div className="tch-body">
@@ -2753,6 +2774,7 @@ function OfferHistoryTab() {
           ))}
         </div>
       )}
+      <Paginator total={sorted.length} page={offerPage} onPage={setOfferPage} />
     </div>
   );
 }
@@ -3003,6 +3025,7 @@ function WalletTab() {
     }
   };
 
+  const [txnPage, setTxnPage] = useState(0);
   const balance = data?.balance ?? 0;
   const txns = data?.transactions ?? [];
 
@@ -3092,7 +3115,7 @@ function WalletTab() {
       {!loading && txns.filter(t => t.type === 'DEBIT').length > 0 && (
         <>
           <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#374151', marginBottom: '0.5rem' }}>Historia ya Malipo</div>
-          {txns.filter(t => t.type === 'DEBIT').map(t => (
+          {txns.filter(t => t.type === 'DEBIT').slice(txnPage * PAGE_SIZE, (txnPage + 1) * PAGE_SIZE).map(t => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.6rem 0.75rem', marginBottom: '0.4rem', background: '#fff', border: '1px solid #f1f5f9', borderRadius: 10 }}>
               <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>⬇️</span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -3105,6 +3128,7 @@ function WalletTab() {
               </div>
             </div>
           ))}
+          <Paginator total={txns.filter(t => t.type === 'DEBIT').length} page={txnPage} onPage={setTxnPage} />
         </>
       )}
     </div>
@@ -3150,6 +3174,7 @@ function DriverWalletTab() {
   if (loading) return <div style={{ textAlign: 'center', padding: '3rem' }}><div className="spinner" /></div>;
   if (err) return <div style={{ padding: '1rem' }}><Alert type="error" message={err} /></div>;
 
+  const [walletPage, setWalletPage] = useState(0);
   const balance = data?.balance ?? 0;
   const txns    = data?.transactions ?? [];
   const credits = txns.filter(t => t.type === 'CREDIT');
@@ -3199,7 +3224,7 @@ function DriverWalletTab() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-          {credits.map(t => (
+          {credits.slice(walletPage * PAGE_SIZE, (walletPage + 1) * PAGE_SIZE).map(t => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.65rem 0.75rem', background: '#fff', border: '1px solid #f1f5f9', borderRadius: 10 }}>
               <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>⬆️</span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -3214,6 +3239,7 @@ function DriverWalletTab() {
           ))}
         </div>
       )}
+      <Paginator total={credits.length} page={walletPage} onPage={setWalletPage} />
     </div>
   );
 }
@@ -3333,7 +3359,7 @@ function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
 }) {
   const [offer, setOffer]         = useState<Record<string, unknown> | null>(null);
   const [accepting, setAccepting] = useState(false);
-  const [countdown, setCountdown] = useState(30);
+  const [countdown, setCountdown] = useState(10);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -3344,18 +3370,18 @@ function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
 
   const clearOffer = useCallback(() => {
     setOffer(null);
-    setCountdown(30);
+    setCountdown(10);
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
 
   const handleNewOffer = useCallback((payload: Record<string, unknown>) => {
     setOffer(payload);
-    setCountdown(30);
+    setCountdown(10);
     setActiveTab('home');
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setCountdown(c => {
-        if (c <= 1) { clearOffer(); return 30; }
+        if (c <= 1) { clearOffer(); return 10; }
         return c - 1;
       });
     }, 1000);

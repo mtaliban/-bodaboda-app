@@ -15,7 +15,7 @@ from app.models.user import User, UserRole
 from app.services.mqtt_service import publish_ride_status, publish_new_offer_to_driver
 from app.services.notification_service import NotificationService
 
-OFFER_EXPIRY_MINUTES = 2
+OFFER_EXPIRY_SECONDS = 10
 
 
 class DriverService:
@@ -331,7 +331,7 @@ class DriverService:
         return await self._create_offer(trip, next_driver)
 
     async def _create_offer(self, trip: Trip, driver: Driver) -> DriverTripOffer:
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=OFFER_EXPIRY_MINUTES)
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=OFFER_EXPIRY_SECONDS)
         offer = DriverTripOffer(
             trip_id=trip.id,
             driver_id=driver.id,
