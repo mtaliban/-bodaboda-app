@@ -1823,8 +1823,9 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   useMqtt(mqttTopics, useCallback((event: MqttEvent) => {
     const p = event.payload as Record<string, unknown>;
 
-    const evtLat = Number(p.lat || 0);
-    const evtLng = Number(p.lng || 0);
+    const evtLat  = Number(p.lat || 0);
+    const evtLng  = Number(p.lng || 0);
+    const evtAddr = p.address ? String(p.address) : undefined;
 
     if (event.event_type === 'RIDE_DRIVER_ASSIGNED' || event.event_type === 'RIDE_ACCEPTED') {
       setDriverId(Number(p.driver_id) || null);
@@ -1839,9 +1840,8 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           rating: 0,
         },
       }));
-      // Show waiting card immediately; update with real GPS only when event has coordinates
       if (evtLat && evtLng) {
-        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setLiveLocPos({ lat: evtLat, lng: evtLng, address: evtAddr, time: new Date().toLocaleTimeString() });
         setDriverPos({ lat: evtLat, lng: evtLng });
       } else {
         setLiveLocPos(prev => prev ?? { lat: null, lng: null, time: new Date().toLocaleTimeString() });
@@ -1858,7 +1858,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
     } else if (event.event_type === 'DRIVER_APPROACHING') {
       setApproaching(true);
       if (evtLat && evtLng) {
-        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setLiveLocPos({ lat: evtLat, lng: evtLng, address: evtAddr, time: new Date().toLocaleTimeString() });
         setDriverPos({ lat: evtLat, lng: evtLng });
       }
       setTimeout(() => setApproaching(false), 8000);
@@ -1866,19 +1866,19 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
       setApproaching(false);
       setTrip(prev => ({ ...prev, status: 'DRIVER_ARRIVED' }));
       if (evtLat && evtLng) {
-        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setLiveLocPos({ lat: evtLat, lng: evtLng, address: evtAddr, time: new Date().toLocaleTimeString() });
         setDriverPos({ lat: evtLat, lng: evtLng });
       }
     } else if (event.event_type === 'RIDE_STARTED') {
       setTrip(prev => ({ ...prev, status: 'IN_PROGRESS' }));
       if (evtLat && evtLng) {
-        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setLiveLocPos({ lat: evtLat, lng: evtLng, address: evtAddr, time: new Date().toLocaleTimeString() });
         setDriverPos({ lat: evtLat, lng: evtLng });
       }
     } else if (event.event_type === 'RIDE_COMPLETED') {
       setTrip(prev => ({ ...prev, status: 'COMPLETED' }));
       if (evtLat && evtLng) {
-        setLiveLocPos({ lat: evtLat, lng: evtLng, time: new Date().toLocaleTimeString() });
+        setLiveLocPos({ lat: evtLat, lng: evtLng, address: evtAddr, time: new Date().toLocaleTimeString() });
         setDriverPos({ lat: evtLat, lng: evtLng });
       }
     }
