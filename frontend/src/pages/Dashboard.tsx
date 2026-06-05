@@ -786,7 +786,8 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const [notifySent, setNotifySent]     = useState(false);
   const [chatOpen, setChatOpen]         = useState(false);
   const [chatUnread, setChatUnread]     = useState(0);
-  const [chatToast, setChatToast]       = useState<string | null>(null);
+  const [chatToast, setChatToast]         = useState<string | null>(null);
+  const [driverPayToast, setDriverPayToast] = useState<string | null>(null);
   const chatToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLocRef = useRef<{ lat: number; lng: number } | null>(null);
   const rtcDriver = useWebRTCCall(trip.id);
@@ -797,28 +798,51 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
   const { publish: publishLoc } = useMqtt(locTopics, useCallback(() => {}, []));
   const { publish: publishStatusEvt } = useMqtt([], useCallback(() => {}, []));
 
-  // Smart GPS: try real device GPS (1.5s timeout), fall back to trip-based coordinates
-  const getSmartCoords = useCallback((eventType: string): Promise<{ lat: number; lng: number; address?: string }> => {
-    const pLat = trip.pickup_lat ?? -6.168,  pLng = trip.pickup_lng ?? 35.751;
-    const dLat = trip.destination_lat ?? pLat, dLng = trip.destination_lng ?? pLng;
-    const r = () => (Math.random() - 0.5) * 0.002;
-    const byEvent: Record<string, { lat: number; lng: number; address?: string }> = {
-      RIDE_STARTED:    { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address ?? 'Mahali pa kuanzia' },
-      RIDE_ACCEPTED:   { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address ?? 'Mahali pa kuanzia' },
-      DRIVER_APPROACHING: { lat: (pLat+dLat)/2 + r(), lng: (pLng+dLng)/2 + r(), address: `Karibu na ${trip.pickup_address ?? 'Mahali pa kuanzia'}` },
-      RIDE_COMPLETED:  { lat: dLat + r()/2, lng: dLng + r()/2, address: trip.destination_address ?? 'Mahali pa kwenda' },
-    };
-    const fallback = byEvent[eventType] ?? { lat: pLat + r(), lng: pLng + r(), address: trip.pickup_address };
+  // Payment notification for driver
+  useMqtt([`rides/${trip.id}/payment`], useCallback((event: MqttEvent) => {
+    if (event.event_type === 'PAYMENT_DONE') {
+      const p = event.payload as Record<string, unknown>;
+      if (String(p.for_role) === 'DRIVER') {
+        const amount = Number(p.amount);
+        setDriverPayToast(`💰 TSh ${amount.toLocaleString()} imeingizwa mkobani`);
+        setTimeout(() => setDriverPayToast(null), 6000);
+      }
+    }
+  }, [])); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Continuous real GPS tracking cached in a ref — used by all action events
+  const realGpsRef = useRef<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      ({ coords }) => { realGpsRef.current = { lat: coords.latitude, lng: coords.longitude }; },
+      () => { /* denied — keep null */ },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  // GPS for action events — uses cached realGpsRef, falls back to trip coords only if GPS never arrived
+  const getSmartCoords = useCallback((_eventType: string): Promise<{ lat: number; lng: number; address?: string }> => {
+    if (realGpsRef.current) {
+      return Promise.resolve({ lat: realGpsRef.current.lat, lng: realGpsRef.current.lng });
+    }
+    const pLat = trip.pickup_lat ?? -6.168, pLng = trip.pickup_lng ?? 35.751;
+    const fallback = { lat: pLat, lng: pLng, address: trip.pickup_address };
     if (!navigator.geolocation) return Promise.resolve(fallback);
     return new Promise(resolve => {
-      const timer = setTimeout(() => resolve(fallback), 1500);
+      const timer = setTimeout(() => resolve(fallback), 5000);
       navigator.geolocation.getCurrentPosition(
-        ({ coords }) => { clearTimeout(timer); resolve({ lat: coords.latitude, lng: coords.longitude, address: fallback.address }); },
+        ({ coords }) => {
+          clearTimeout(timer);
+          realGpsRef.current = { lat: coords.latitude, lng: coords.longitude };
+          resolve({ lat: coords.latitude, lng: coords.longitude });
+        },
         () => { clearTimeout(timer); resolve(fallback); },
-        { enableHighAccuracy: false, timeout: 1500 }
+        { enableHighAccuracy: true, timeout: 5000 }
       );
     });
-  }, [trip.pickup_lat, trip.pickup_lng, trip.destination_lat, trip.destination_lng, trip.pickup_address, trip.destination_address]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trip.pickup_lat, trip.pickup_lng, trip.pickup_address]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const publishGpsOnAction = useCallback(async (eventType: string) => {
     const driverId = trip.driver_id;
@@ -923,6 +947,18 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
           boxShadow: '0 4px 16px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: '0.5rem',
         }}>
           💬 Abiria: {chatToast}
+        </div>
+      )}
+
+      {/* Payment notification toast for driver */}
+      {driverPayToast && (
+        <div style={{
+          position: 'fixed', top: chatToast ? 72 : 16, left: '50%', transform: 'translateX(-50%)',
+          background: 'linear-gradient(135deg, #1a3a1a, #2d6a2d)', color: '#fff', borderRadius: 12,
+          padding: '0.6rem 1rem', fontSize: '0.88rem', fontWeight: 700, zIndex: 901, maxWidth: '90vw',
+          boxShadow: '0 4px 20px rgba(0,100,0,0.4)',
+        }}>
+          {driverPayToast}
         </div>
       )}
       <div style={{ display: chatOpen ? undefined : 'none' }}>
@@ -1815,6 +1851,7 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const [chatOpen, setChatOpen]         = useState(false);
   const [chatUnread, setChatUnread]     = useState(0);
   const [declineToast, setDeclineToast] = useState<string | null>(null);
+  const [paymentToast, setPaymentToast] = useState<string | null>(null);
   const [retrying, setRetrying]         = useState(false);
   const { user } = useAuth();
   const canCall = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
@@ -1824,6 +1861,19 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const mqttTopics = ACTIVE_TRIP_STATUSES.includes(trip.status)
     ? [`rides/${trip.id}/status`]
     : [];
+
+  // Payment notification
+  const paymentTopics = [`rides/${trip.id}/payment`];
+  useMqtt(paymentTopics, useCallback((event: MqttEvent) => {
+    if (event.event_type === 'PAYMENT_DONE') {
+      const p = event.payload as Record<string, unknown>;
+      if (String(p.for_role) === 'RIDER') {
+        const amount = Number(p.amount);
+        setPaymentToast(`💸 TSh ${amount.toLocaleString()} imekatwa kwa safari yako`);
+        setTimeout(() => setPaymentToast(null), 6000);
+      }
+    }
+  }, [])); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Direct subscription to driver location topic — independent of map
   const locTopics = driverId && [...ACTIVE_TRIP_STATUSES, 'COMPLETED'].includes(trip.status)
@@ -1860,6 +1910,8 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           vehicle_model: String(p.vehicle ?? ''),
           plate_number: String(p.plate ?? ''),
           rating: 0,
+          photo_url: p.photo_url ? String(p.photo_url) : undefined,
+          driver_phone: p.driver_phone ? String(p.driver_phone) : undefined,
         },
       }));
       if (evtLat && evtLng) {
@@ -2007,6 +2059,11 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
         <div className="decline-toast">{declineToast}</div>
       )}
 
+      {/* ── Payment notification toast ── */}
+      {paymentToast && (
+        <div className="payment-toast">{paymentToast}</div>
+      )}
+
       {/* ── Map area ── */}
       <div className="tracking-map-area">
         {/* Floating header on top of map */}
@@ -2048,7 +2105,10 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
           <div className="tsv-chat-header">
             <button className="tsv-chat-back" onClick={() => setChatOpen(false)}>←</button>
             <div className="tsv-chat-avatar">
-              {(trip.assigned_driver?.full_name ?? 'D').charAt(0).toUpperCase()}
+              {trip.assigned_driver?.photo_url
+                ? <img src={trip.assigned_driver.photo_url} alt="Dereva" style={{ width:'100%', height:'100%', borderRadius:'50%', objectFit:'cover' }} />
+                : (trip.assigned_driver?.full_name ?? 'D').charAt(0).toUpperCase()
+              }
             </div>
             <div className="tsv-chat-info">
               <div className="tsv-chat-name">{trip.assigned_driver?.full_name ?? 'Dereva'}</div>
@@ -2099,13 +2159,19 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
         {trip.assigned_driver && (
           <div className="tracking-driver-card">
             <div className="tracking-driver-avatar">
-              {trip.assigned_driver.full_name.charAt(0).toUpperCase()}
+              {trip.assigned_driver.photo_url
+                ? <img src={trip.assigned_driver.photo_url} alt="Dereva" style={{ width:'100%', height:'100%', borderRadius:'50%', objectFit:'cover' }} />
+                : trip.assigned_driver.full_name.charAt(0).toUpperCase()
+              }
             </div>
             <div className="tracking-driver-info">
               <div className="tracking-driver-name">{trip.assigned_driver.full_name}</div>
               <div className="tracking-driver-sub">
-                {trip.assigned_driver.vehicle_model} · {trip.assigned_driver.plate_number}
+                🏍️ {trip.assigned_driver.vehicle_model} · 📋 {trip.assigned_driver.plate_number}
               </div>
+              {trip.assigned_driver.driver_phone && (
+                <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>📱 {trip.assigned_driver.driver_phone}</div>
+              )}
               {trip.assigned_driver.rating > 0 && (
                 <div className="tracking-driver-rating">⭐ {trip.assigned_driver.rating.toFixed(1)}</div>
               )}

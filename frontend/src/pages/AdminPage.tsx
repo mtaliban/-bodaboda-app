@@ -14,20 +14,31 @@ interface HistEvent { id: number; trip_id: number; event_type: string; changed_b
 function fmtDate(s: string) { return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
 function fmtTime(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function exportCsv(rows: Record<string, unknown>[], filename: string) {
   if (!rows.length) return;
   const cols = Object.keys(rows[0]);
-  const csv = [cols.join(','), ...rows.map(r => cols.map(c => JSON.stringify(r[c] ?? '')).join(','))].join('\n');
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = filename; a.click();
+  const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = '﻿' + [cols.map(escape).join(','), ...rows.map(r => cols.map(c => escape(r[c])).join(','))].join('\r\n');
+  triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
 }
 
 function exportExcel(rows: Record<string, unknown>[], filename: string) {
   if (!rows.length) return;
   const cols = Object.keys(rows[0]);
-  const ths = cols.map(c => `<th style="background:#1e293b;color:#fff;padding:6px 10px;border:1px solid #334155">${c}</th>`).join('');
-  const trs = rows.map(r => `<tr>${cols.map(c => `<td style="padding:5px 10px;border:1px solid #e5e7eb">${r[c] ?? ''}</td>`).join('')}</tr>`).join('');
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"/></head><body><table>${ths}${trs}</table></body></html>`;
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'application/vnd.ms-excel' })); a.download = filename; a.click();
+  const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = '﻿' + [cols.map(escape).join(','), ...rows.map(r => cols.map(c => escape(r[c])).join(','))].join('\r\n');
+  triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), filename);
 }
 
 function ExportBar({ rows, name }: { rows: Record<string, unknown>[]; name: string }) {
@@ -199,6 +210,28 @@ export default function AdminPage() {
     setUsers(p => p.filter(u => u.id !== userId));
     toast('Mtumiaji amefutwa.');
   };
+
+  const extendCard = async (cardId: unknown, months: number) => {
+    try {
+      const res = await axios.patch(`${ADMIN_API}/admin/wallet/cards/${cardId}/extend`, { months }, { headers });
+      setWalletCards(p => p.map(c => c.id === cardId ? { ...c, ...extractExpiry(res.data.new_expiry) } : c));
+      toast(`Kadi imepanuliwa miezi ${months}.`);
+    } catch { toast('Imeshindwa kupanua kadi.'); }
+  };
+
+  const burnCard = async (cardId: unknown, userName: string) => {
+    if (!confirm(`Futa kadi ya ${userName}? Hatua hii haiwezi kurudishwa.`)) return;
+    try {
+      await axios.delete(`${ADMIN_API}/admin/wallet/cards/${cardId}`, { headers });
+      setWalletCards(p => p.filter(c => c.id !== cardId));
+      toast('Kadi imefutwa.');
+    } catch { toast('Imeshindwa kufuta kadi.'); }
+  };
+
+  function extractExpiry(str: string) {
+    const [m, y] = str.split('/');
+    return { expiry_month: parseInt(m), expiry_year: parseInt(y) };
+  }
 
   const saveEditUser = async () => {
     if (!editUser) return;
@@ -629,23 +662,38 @@ export default function AdminPage() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        {['#', 'Mtumiaji', 'Simu', 'Aina', 'Nambari ya Kadi', 'Tarehe ya Kumalizika', 'Tarehe ya Kutengeneza'].map(h => (
+                        {['#', 'Mtumiaji', 'Simu', 'Aina', 'Nambari ya Kadi', 'Tarehe ya Kumalizika', 'Tarehe ya Kutengeneza', 'Vitendo'].map(h => (
                           <th key={h} style={thStyle}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {walletCards.map((c, i) => (
+                      {walletCards.map((c, i) => {
+                        const expM = Number(c.expiry_month ?? 0);
+                        const expY = Number(c.expiry_year ?? 0);
+                        const now = new Date();
+                        const isExpired = expY < now.getFullYear() || (expY === now.getFullYear() && expM < now.getMonth() + 1);
+                        return (
                         <tr key={String(c.id ?? i)}>
                           <td style={tdStyle}>{String(c.id)}</td>
                           <td style={tdStyle}>{String(c.user_name ?? '')}</td>
                           <td style={tdStyle}>{String(c.user_phone ?? '')}</td>
                           <td style={tdStyle}>{String(c.user_role ?? '')}</td>
                           <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{String(c.card_number ?? '')}</td>
-                          <td style={tdStyle}>{String(c.expiry_month ?? '').padStart(2,'0')}/{String(c.expiry_year ?? '').slice(-2)}</td>
+                          <td style={{ ...tdStyle, color: isExpired ? '#ef4444' : '#16a34a', fontWeight: 600 }}>
+                            {String(expM).padStart(2,'0')}/{expY}{isExpired ? ' ⚠️' : ''}
+                          </td>
                           <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>{c.created_at ? new Date(String(c.created_at)).toLocaleString() : ''}</td>
+                          <td style={tdStyle}>
+                            <div style={{ display:'flex', gap:'0.3rem' }}>
+                              <button onClick={() => extendCard(c.id, 12)} style={{ background:'#dbeafe', color:'#1d4ed8', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>+12M</button>
+                              <button onClick={() => extendCard(c.id, 24)} style={{ background:'#ede9fe', color:'#7c3aed', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>+24M</button>
+                              <button onClick={() => burnCard(c.id, String(c.user_name ?? ''))} style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>🔥</button>
+                            </div>
+                          </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

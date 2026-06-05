@@ -32,7 +32,7 @@ from decimal import Decimal
 
 from app.schemas.trip import TripRequest
 from app.services.driver_service import DriverService
-from app.services.mqtt_service import publish_ride_requested, publish_ride_status
+from app.services.mqtt_service import publish_ride_requested, publish_ride_status, publish_payment_done
 from app.services.notification_service import NotificationService
 from app.models.wallet import WalletTransaction
 from app.models.admin_earning import AdminEarning
@@ -482,4 +482,13 @@ class TripService:
 
         await self.db.commit()
         await self.db.refresh(trip)
+
+        await publish_payment_done(
+            trip_id=trip.id,
+            fare=int(fare),
+            rider_cut=int(fare),
+            driver_cut=int(driver_cut),
+            admin_cut=int(admin_cut),
+        )
+
         return trip

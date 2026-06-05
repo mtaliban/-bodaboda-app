@@ -164,6 +164,7 @@ async def accept_trip(
         driver_phone=current_user.phone or "",
         vehicle=driver.vehicle_model,
         plate=driver.plate_number,
+        photo_url=current_user.profile_image_url,
     )
 
     return TripOut.model_validate(trip)
@@ -301,6 +302,13 @@ async def complete_trip(
     await db.refresh(trip)
 
     await mqtt_publisher.publish_ride_completed(trip_id=trip.id)
+    await mqtt_publisher.publish_payment_done(
+        trip_id=trip.id,
+        fare=int(fare),
+        rider_cut=int(fare),
+        driver_cut=int(driver_cut),
+        admin_cut=int(admin_cut),
+    )
     return TripOut.model_validate(trip)
 
 

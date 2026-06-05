@@ -124,6 +124,8 @@ export interface AssignedDriver {
   vehicle_model: string;
   plate_number: string;
   rating: number;
+  photo_url?: string;
+  driver_phone?: string;
 }
 
 export interface TripStatusHistory {

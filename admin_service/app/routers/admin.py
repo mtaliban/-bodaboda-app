@@ -269,6 +269,35 @@ async def get_virtual_cards(db: AsyncSession = Depends(get_db)):
     return [dict(r) for r in result.mappings()]
 
 
+# ── Extend Virtual Card Expiry ────────────────────────────────────────────────
+@router.patch("/wallet/cards/{card_id}/extend", dependencies=[Depends(verify_admin_token)])
+async def extend_virtual_card(card_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    months = int(body.get("months", 12))
+    if months < 1 or months > 60:
+        raise HTTPException(status_code=400, detail="months must be 1-60")
+    result = await db.execute(text("SELECT expiry_month, expiry_year FROM virtual_cards WHERE id = :id"), {"id": card_id})
+    row = result.mappings().one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Card not found")
+    total_months = row["expiry_month"] - 1 + row["expiry_year"] * 12 + months
+    new_year = total_months // 12
+    new_month = total_months % 12 + 1
+    await db.execute(
+        text("UPDATE virtual_cards SET expiry_month = :m, expiry_year = :y WHERE id = :id"),
+        {"m": new_month, "y": new_year, "id": card_id}
+    )
+    await db.commit()
+    return {"ok": True, "new_expiry": f"{str(new_month).zfill(2)}/{new_year}"}
+
+
+# ── Delete Virtual Card (burn) ────────────────────────────────────────────────
+@router.delete("/wallet/cards/{card_id}", dependencies=[Depends(verify_admin_token)])
+async def delete_virtual_card(card_id: int, db: AsyncSession = Depends(get_db)):
+    await db.execute(text("DELETE FROM virtual_cards WHERE id = :id"), {"id": card_id})
+    await db.commit()
+    return {"ok": True}
+
+
 # ── WebSocket — real-time event feed ─────────────────────────────────────────
 @router.websocket("/ws")
 async def admin_ws(websocket: WebSocket):

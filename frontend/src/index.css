@@ -3359,14 +3359,15 @@ button.edit-back {
 }
 
 .tc-msg-bubble {
-  padding: 0.45rem 0.75rem 0.3rem;
-  border-radius: 12px;
-  font-size: 0.875rem;
-  line-height: 1.4;
+  padding: 0.35rem 0.6rem 0.25rem;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  line-height: 1.35;
   position: relative;
   word-break: break-word;
   cursor: default;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+  max-width: 80vw;
 }
 .tc-msg-mine .tc-msg-bubble {
   background: #dcf8c6;
@@ -3415,24 +3416,26 @@ button.edit-back {
 
 .tc-input-row {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
+  gap: 0.4rem;
+  padding: 0.45rem 0.6rem;
   background: #f0f0f0;
   flex-shrink: 0;
   align-items: center;
+  border-top: 1px solid #e5e7eb;
 }
 .tc-input-row input {
   flex: 1;
-  padding: 0.55rem 0.875rem;
+  padding: 0.45rem 0.75rem;
   border: none;
-  border-radius: 24px;
-  font-size: 0.9rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
   outline: none;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  min-height: 34px;
 }
 .tc-send-btn {
-  width: 40px; height: 40px;
+  width: 34px; height: 34px;
   border-radius: 50%;
   background: var(--primary);
   color: #fff;
@@ -4311,6 +4314,24 @@ button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
 @keyframes toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.payment-toast {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  background: linear-gradient(135deg, #064e3b, #065f46);
+  color: #d1fae5;
+  padding: 0.7rem 1.4rem;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  box-shadow: 0 4px 20px rgba(6,78,59,0.5);
+  white-space: nowrap;
+  animation: toast-in 0.25s ease;
+  border: 1px solid #10b981;
 }
 
 /* ── ChatPanel (full-screen trip chat from My Trips) ────────────────── */
