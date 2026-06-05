@@ -127,7 +127,19 @@ async def get_my_trips(
         .order_by(Trip.created_at.desc())
     )
     trips = result.scalars().all()
-    return [TripOut.model_validate(t) for t in trips]
+
+    out = []
+    for t in trips:
+        trip_out = TripOut.model_validate(t)
+        rp_res = await db.execute(select(RiderProfile).where(RiderProfile.id == t.rider_id))
+        rp = rp_res.scalar_one_or_none()
+        if rp:
+            ru_res = await db.execute(select(User).where(User.id == rp.user_id))
+            ru = ru_res.scalar_one_or_none()
+            if ru:
+                trip_out.rider_phone = ru.phone
+        out.append(trip_out)
+    return out
 
 
 # ── POST /driver/trips/{trip_id}/accept ───────────────────────────────────────
@@ -156,6 +168,16 @@ async def accept_trip(
     await db.commit()
     await db.refresh(trip)
 
+    # Fetch rider phone for driver-side tel: calling
+    rp_res = await db.execute(select(RiderProfile).where(RiderProfile.id == trip.rider_id))
+    rp = rp_res.scalar_one_or_none()
+    rider_user_phone: str | None = None
+    if rp:
+        ru_res = await db.execute(select(User).where(User.id == rp.user_id))
+        ru = ru_res.scalar_one_or_none()
+        if ru:
+            rider_user_phone = ru.phone
+
     # Publish MQTT event → Rider gets real-time update
     await mqtt_publisher.publish_ride_accepted(
         trip_id=trip.id,
@@ -167,7 +189,9 @@ async def accept_trip(
         photo_url=current_user.profile_image_url,
     )
 
-    return TripOut.model_validate(trip)
+    trip_out = TripOut.model_validate(trip)
+    trip_out.rider_phone = rider_user_phone
+    return trip_out
 
 
 # ── POST /driver/trips/{trip_id}/arrived ──────────────────────────────────────

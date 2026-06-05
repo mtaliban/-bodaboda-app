@@ -29,6 +29,7 @@ class TripOut(BaseModel):
     payment_method: str
     status: TripStatus
     fare_tzs: Optional[int] = None
+    rider_phone: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

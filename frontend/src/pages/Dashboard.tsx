@@ -932,8 +932,14 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
         </button>
         <button
           className={`ctc-call-btn${rtcDriver.callState !== 'idle' ? ' ring' : ''}`}
-          onClick={rtcDriver.call}
-          title="Piga simu ndani ya app (WebRTC)"
+          onClick={() => {
+            if (window.location.protocol === 'https:') {
+              rtcDriver.call();
+            } else {
+              trip.rider_phone ? (window.location.href = 'tel:' + trip.rider_phone) : alert('Inahitaji HTTPS kupiga simu ndani ya app.');
+            }
+          }}
+          title="Piga simu"
         >
           📞 Piga Simu
         </button>
@@ -1229,43 +1235,75 @@ function DriverHomePanel() {
         </div>
       )}
 
-      {/* INCOMING TRIP via MQTT */}
-      {isAvailable && incomingTrip && (
-        <div className="offer-card offer-card-featured" style={{ marginTop: '1rem' }}>
-          <div className="offer-card-head">
-            <span className="trip-status-badge ts-searching">🔔 Safari Mpya!</span>
-            <span className="trip-card-id">{(incomingTrip as any).trip_name ?? `Safari #${(incomingTrip as any).trip_id ?? incomingTrip.id}`}</span>
-          </div>
-          <div className="trip-route offer-route">
-            <div className="trip-route-item">
-              <span className="trip-route-dot dot-pickup" />
+      {/* INCOMING TRIP via MQTT — fixed full-screen overlay banner */}
+      {incomingTrip && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 2000,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+          padding: '0.75rem',
+          paddingTop: 'max(0.75rem, env(safe-area-inset-top))',
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 18, width: '100%', maxWidth: 420,
+            boxShadow: '0 8px 40px rgba(0,0,0,0.4)',
+            overflow: 'hidden',
+            animation: 'trip-notification-bounce 0.4s cubic-bezier(0.34,1.56,0.64,1)',
+          }}>
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #ff6b00, #ff8c00)',
+              color: '#fff', padding: '0.875rem 1rem',
+              display: 'flex', alignItems: 'center', gap: '0.75rem',
+            }}>
+              <span style={{ fontSize: '1.5rem' }}>🔔</span>
               <div>
-                <span className="offer-route-label">Pickup</span>
-                <span className="trip-route-text">{(incomingTrip as any).pickup_address}</span>
+                <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>Safari Mpya!</div>
+                <div style={{ fontSize: '0.78rem', opacity: 0.9 }}>
+                  {(incomingTrip as any).trip_name ?? `Safari #${(incomingTrip as any).trip_id ?? incomingTrip.id}`}
+                </div>
+              </div>
+              <div style={{
+                marginLeft: 'auto', background: 'rgba(255,255,255,0.2)',
+                borderRadius: '50%', width: 32, height: 32,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1rem', fontWeight: 700, cursor: 'pointer',
+              }} onClick={declineTrip}>✕</div>
+            </div>
+            {/* Route */}
+            <div style={{ padding: '0.75rem 1rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                <span style={{ color: '#22c55e', fontWeight: 700, fontSize: '0.75rem', marginTop: 2 }}>FROM</span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1e293b' }}>{(incomingTrip as any).pickup_address}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '0.75rem', marginTop: 2 }}>TO</span>
+                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#1e293b' }}>{(incomingTrip as any).destination_address}</span>
+              </div>
+              <div style={{
+                display: 'flex', gap: '0.75rem', marginTop: '0.75rem',
+                background: '#f8fafc', borderRadius: 10, padding: '0.5rem 0.75rem',
+              }}>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>🏍️ {(incomingTrip as any).ride_type}</span>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>💵 {(incomingTrip as any).payment_method}</span>
+                {(incomingTrip as any).fare_tzs && (
+                  <span style={{ fontSize: '0.8rem', color: '#059669', fontWeight: 700 }}>TSh {Number((incomingTrip as any).fare_tzs).toLocaleString()}</span>
+                )}
               </div>
             </div>
-            <div className="trip-route-line" />
-            <div className="trip-route-item">
-              <span className="trip-route-dot dot-dest" />
-              <div>
-                <span className="offer-route-label">Destination</span>
-                <span className="trip-route-text">{(incomingTrip as any).destination_address}</span>
-              </div>
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '0.5rem', padding: '0 1rem 1rem' }}>
+              <button
+                style={{ flex: 1, padding: '0.75rem', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 12, fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+                onClick={declineTrip} disabled={!!actionLoading}
+              >✕ Kataa</button>
+              <button
+                style={{ flex: 2, padding: '0.75rem', background: 'linear-gradient(135deg, #ff6b00, #ff8c00)', color: '#fff', border: 'none', borderRadius: 12, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,107,0,0.4)' }}
+                onClick={acceptTrip} disabled={!!actionLoading}
+              >
+                {actionLoading === 'accept' ? '⏳ Inakubali…' : '✓ Kubali Safari'}
+              </button>
             </div>
-          </div>
-          <div className="offer-meta-row">
-            <span>🏍️ {(incomingTrip as any).ride_type}</span>
-            <span>💵 {(incomingTrip as any).payment_method}</span>
-          </div>
-          <div className="offer-actions">
-            <button className="btn btn-ghost" onClick={declineTrip} disabled={!!actionLoading}>
-              ✕ Kataa
-            </button>
-            <button className="btn btn-primary" onClick={acceptTrip} disabled={!!actionLoading}>
-              {actionLoading === 'accept'
-                ? <><span className="btn-spinner" /> Inakubali…</>
-                : '✓ Kubali Safari'}
-            </button>
           </div>
         </div>
       )}
@@ -1853,9 +1891,23 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const [declineToast, setDeclineToast] = useState<string | null>(null);
   const [paymentToast, setPaymentToast] = useState<string | null>(null);
   const [retrying, setRetrying]         = useState(false);
+  const chatOverlayRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const canCall = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
   const rtc = useWebRTCCall(canCall ? trip.id : null);
+
+  // Fix chat keyboard layout on Android: resize overlay to visual viewport height
+  useEffect(() => {
+    if (!chatOpen) return;
+    const update = () => {
+      if (chatOverlayRef.current && window.visualViewport) {
+        chatOverlayRef.current.style.height = window.visualViewport.height + 'px';
+      }
+    };
+    window.visualViewport?.addEventListener('resize', update);
+    update();
+    return () => window.visualViewport?.removeEventListener('resize', update);
+  }, [chatOpen]);
 
   // Real-time updates via MQTT (status events)
   const mqttTopics = ACTIVE_TRIP_STATUSES.includes(trip.status)
@@ -2099,9 +2151,9 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
         )}
       </div>
 
-      {/* ── Chat overlay (full-screen, only when opened) ── */}
-      {showChat && chatOpen && (
-        <div className="tsv-chat-overlay">
+      {/* ── Chat overlay (always mounted when showChat so WebSocket stays connected; visibility controlled via display) ── */}
+      {showChat && (
+        <div ref={chatOverlayRef} className="tsv-chat-overlay" style={{ display: chatOpen ? 'flex' : 'none' }}>
           <div className="tsv-chat-header">
             <button className="tsv-chat-back" onClick={() => setChatOpen(false)}>←</button>
             <div className="tsv-chat-avatar">
@@ -2115,10 +2167,22 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
               <div className="tsv-chat-sub">{trip.assigned_driver?.vehicle_model ?? ''} · {trip.assigned_driver?.plate_number ?? ''}</div>
             </div>
             {canCall && (
-              <button className="tsv-chat-call" onClick={rtc.call} title="Piga simu">📞</button>
+              <button className="tsv-chat-call" onClick={() => {
+                if (window.location.protocol === 'https:') {
+                  rtc.call();
+                } else {
+                  window.location.href = 'tel:' + (trip.assigned_driver?.driver_phone ?? '');
+                }
+              }} title="Piga simu">📞</button>
             )}
           </div>
-          <TripChat tripId={trip.id} myRole="RIDER" myName={user?.full_name ?? 'Rider'} onNewMessage={() => { if (!chatOpen) setChatUnread(c => c + 1); }} />
+          <TripChat tripId={trip.id} myRole="RIDER" myName={user?.full_name ?? 'Rider'} onNewMessage={(text?: string) => {
+            if (!chatOpen) {
+              setChatUnread(c => c + 1);
+              setPaymentToast(`💬 Dereva: ${text ? (text.length > 50 ? text.slice(0, 50) + '…' : text) : 'Ujumbe mpya'}`);
+              setTimeout(() => setPaymentToast(null), 5000);
+            }
+          }} />
         </div>
       )}
 
@@ -2180,8 +2244,14 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
               {canCall && (
                 <button
                   className={`tracking-icon-btn tracking-call-btn${rtc.callState !== 'idle' ? ' ring' : ''}`}
-                  onClick={rtc.call}
-                  title="Piga simu ndani ya app (WebRTC)"
+                  onClick={() => {
+                    if (window.location.protocol === 'https:') {
+                      rtc.call();
+                    } else {
+                      window.location.href = 'tel:' + (trip.assigned_driver?.driver_phone ?? '');
+                    }
+                  }}
+                  title="Piga simu"
                 >
                   📞
                 </button>

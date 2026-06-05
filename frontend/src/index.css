@@ -4631,3 +4631,8 @@ button.chat-sheet-call:hover { background: rgba(0,0,0,0.07); }
   .tc-msg-bubble { font-size: 0.82rem; }
   .trip-chat { height: 320px; }
 }
+
+@keyframes trip-notification-bounce {
+  from { opacity: 0; transform: translateY(-30px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}

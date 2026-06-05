@@ -158,8 +158,10 @@ export interface Trip {
   destination_lng: number | null;
   ride_type: 'BODA';
   payment_method: 'CASH';
+  fare_tzs: number | null;
   status: TripStatus;
   message: string;
+  rider_phone?: string;
   created_at: string;
   updated_at: string;
   assigned_driver: AssignedDriver | null;
