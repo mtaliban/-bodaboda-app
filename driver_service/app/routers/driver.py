@@ -1,3 +1,6 @@
+import math
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,8 +12,26 @@ from app.models.driver import Driver, DriverStatus
 from app.models.driver_profile import DriverProfile
 from app.models.trip import Trip, TripStatus
 from app.models.trip import RideType, PaymentMethod
+from app.models.wallet import WalletTransaction
+from app.models.rider_profile import RiderProfile
+from app.models.notification import Notification
 from app.schemas.driver import DriverOut, TripOut, DriverStatusUpdate, LocationUpdate
 from app.services import mqtt_publisher
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng/2)**2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _calc_fare(trip: Trip) -> int:
+    if trip.pickup_lat and trip.pickup_lng and trip.destination_lat and trip.destination_lng:
+        km = _haversine_km(trip.pickup_lat, trip.pickup_lng, trip.destination_lat, trip.destination_lng)
+        return max(1500, round((1000 + 400 * km) / 10) * 10)
+    return 1500
 
 router = APIRouter()
 
@@ -216,6 +237,38 @@ async def complete_trip(
     driver.status = DriverStatus.AVAILABLE
     driver.current_trip_id = None
     driver.total_trips += 1
+
+    # Deduct fare from rider's wallet and create notification
+    fare = _calc_fare(trip)
+    rp_result = await db.execute(select(RiderProfile).where(RiderProfile.id == trip.rider_id))
+    rp = rp_result.scalar_one_or_none()
+    rider_user: User | None = None
+    if rp:
+        ru_result = await db.execute(select(User).where(User.id == rp.user_id))
+        rider_user = ru_result.scalar_one_or_none()
+
+    if rider_user is not None:
+        old_bal = Decimal(str(rider_user.wallet_balance)) if rider_user.wallet_balance is not None else Decimal('0')
+        new_bal = max(Decimal('0'), old_bal - Decimal(str(fare)))
+        rider_user.wallet_balance = new_bal
+        desc = f"Safari #{trip.id} — {(trip.pickup_address or '')[:80]} → {(trip.destination_address or '')[:80]}"
+        db.add(WalletTransaction(
+            user_id=rider_user.id,
+            type="DEBIT",
+            amount=Decimal(str(fare)),
+            balance_after=new_bal,
+            trip_id=trip.id,
+            description=desc[:200],
+        ))
+        db.add(Notification(
+            recipient_role="RIDER",
+            recipient_profile_id=trip.rider_id,
+            title="Safari imekamilika",
+            message=f"TSh {fare:,} imekatwa kwa safari yako. Salio: TSh {int(new_bal):,}",
+            type="TRIP_COMPLETED",
+            related_trip_id=trip.id,
+        ))
+
     await db.commit()
     await db.refresh(trip)
 
