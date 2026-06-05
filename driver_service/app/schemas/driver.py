@@ -10,7 +10,7 @@ class DriverStatusUpdate(BaseModel):
 
 
 class LocationUpdate(BaseModel):
-    trip_id: int
+    trip_id: Optional[int] = None
     lat: float
     lng: float
 
