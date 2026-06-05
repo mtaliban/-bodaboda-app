@@ -1971,6 +1971,14 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
   const canCall = ['DRIVER_ASSIGNED', 'DRIVER_ARRIVED', 'IN_PROGRESS'].includes(trip.status);
   const rtc = useWebRTCCall(canCall ? trip.id : null);
 
+  // One-time sync on mount — catches any MQTT events that arrived before WebSocket connected
+  useEffect(() => {
+    api.get<Trip>(`/trips/${initialTrip.id}`).then(({ data }) => {
+      setTrip(prev => ({ ...prev, ...data }));
+      if (data.assigned_driver?.id) setDriverId(data.assigned_driver.id);
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Fix chat keyboard layout on Android: resize overlay to visual viewport height
   useEffect(() => {
     if (!chatOpen) return;
@@ -3151,6 +3159,7 @@ function DriverWalletTab() {
   const [card, setCard]     = useState<CardData | 'loading'>('loading');
   const [cardErr, setCardErr] = useState('');
   const [getting, setGetting] = useState(false);
+  const [walletPage, setWalletPage] = useState(0);
 
   useEffect(() => {
     api.get<WalletData>('/wallet')
@@ -3173,8 +3182,6 @@ function DriverWalletTab() {
 
   if (loading) return <div style={{ textAlign: 'center', padding: '3rem' }}><div className="spinner" /></div>;
   if (err) return <div style={{ padding: '1rem' }}><Alert type="error" message={err} /></div>;
-
-  const [walletPage, setWalletPage] = useState(0);
   const balance = data?.balance ?? 0;
   const txns    = data?.transactions ?? [];
   const credits = txns.filter(t => t.type === 'CREDIT');
