@@ -281,7 +281,11 @@ export default function DriverDashboard() {
   }, [messages]);
 
   // ── MQTT ─────────────────────────────────────────────────────────────────────
-  const mqttTopics = ['rides/new', offer ? `rides/${offer.trip_id}/chat` : 'rides/__none__'];
+  const mqttTopics = [
+    'rides/new',
+    driver?.id ? `driver/${driver.id}/offers` : 'rides/__none__',
+    offer?.trip_id ? `rides/${offer.trip_id}/chat` : 'rides/__none__',
+  ];
   const { publish } = useMqtt(mqttTopics, useCallback((event) => {
     if (event.event_type === 'CHAT_MESSAGE') {
       const p = event.payload as { sender?: string; text?: string };
@@ -294,10 +298,12 @@ export default function DriverDashboard() {
       }
       return;
     }
-    setNewRideAlert(true);
-    setTimeout(() => setNewRideAlert(false), 5000);
-    if (driver?.status === 'AVAILABLE') fetchOffer();
-  }, [driver?.status, fetchOffer, offer]));
+    if (driver?.status === 'AVAILABLE') {
+      setNewRideAlert(true);
+      setTimeout(() => setNewRideAlert(false), 5000);
+      fetchOffer();
+    }
+  }, [driver?.status, fetchOffer]));
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 

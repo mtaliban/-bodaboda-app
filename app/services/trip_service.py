@@ -32,7 +32,7 @@ from decimal import Decimal
 
 from app.schemas.trip import TripRequest
 from app.services.driver_service import DriverService
-from app.services.mqtt_service import publish_ride_requested, publish_ride_status, publish_payment_done
+from app.services.mqtt_service import publish_ride_requested, publish_ride_status, publish_payment_done, publish_new_offer_to_driver
 from app.services.notification_service import NotificationService
 from app.models.wallet import WalletTransaction
 from app.models.admin_earning import AdminEarning
@@ -228,6 +228,10 @@ class TripService:
             "payment_method":      trip.payment_method.value,
             "fare_tzs":            trip.fare_tzs,
         })
+
+        # Notify the specific driver directly so they don't rely on broadcast alone
+        if offer is not None:
+            await publish_new_offer_to_driver(offer.driver_id, trip.id)
 
         return trip
 

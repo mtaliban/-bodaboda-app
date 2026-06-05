@@ -51,6 +51,14 @@ async def publish_ride_status(trip_id: int, status: str, extra: dict | None = No
     )
 
 
+async def publish_new_offer_to_driver(driver_id: int, trip_id: int) -> None:
+    await publish(
+        topic=f"driver/{driver_id}/offers",
+        event_type="NEW_TRIP_OFFER",
+        payload={"driver_id": driver_id, "trip_id": trip_id},
+    )
+
+
 async def publish_payment_done(trip_id: int, fare: int, rider_cut: int, driver_cut: int, admin_cut: int) -> None:
     for role, amount, msg in [
         ("RIDER",  rider_cut,  f"TSh {rider_cut:,} imekatwa kwa safari #{trip_id}"),

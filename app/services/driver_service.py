@@ -12,7 +12,7 @@ from app.models.driver_trip_offer import DriverTripOffer, OfferStatus
 from app.models.trip import Trip, TripStatus
 from app.models.trip_status_history import TripStatusHistory, ChangedBy
 from app.models.user import User, UserRole
-from app.services.mqtt_service import publish_ride_status
+from app.services.mqtt_service import publish_ride_status, publish_new_offer_to_driver
 from app.services.notification_service import NotificationService
 
 OFFER_EXPIRY_MINUTES = 2
@@ -290,6 +290,7 @@ class DriverService:
 
         if next_offer:
             await publish_ride_status(trip.id, "SEARCHING_AGAIN", {"trip_id": trip.id})
+            await publish_new_offer_to_driver(next_offer.driver_id, trip.id)
         else:
             await publish_ride_status(trip.id, "NO_DRIVER_AVAILABLE", {"trip_id": trip.id})
 
