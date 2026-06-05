@@ -20,12 +20,12 @@ def _build_event(event_type: str, payload: dict) -> str:
     })
 
 
-async def publish(topic: str, event_type: str, payload: dict) -> None:
+async def publish(topic: str, event_type: str, payload: dict, retain: bool = False) -> None:
     message = _build_event(event_type, payload)
     try:
         async with aiomqtt.Client(hostname=settings.MQTT_HOST, port=settings.MQTT_PORT) as client:
-            await client.publish(topic, payload=message, qos=1)
-            logger.info("MQTT published | topic=%s event=%s", topic, event_type)
+            await client.publish(topic, payload=message, qos=1, retain=retain)
+            logger.info("MQTT published | topic=%s event=%s retain=%s", topic, event_type, retain)
     except Exception as exc:
         logger.error("MQTT publish failed | topic=%s error=%s", topic, exc)
 
@@ -44,6 +44,7 @@ async def publish_ride_accepted(trip_id: int, driver_id: int, driver_name: str, 
             "plate":        plate,
             "photo_url":    photo_url or "",
         },
+        retain=True,
     )
 
 
@@ -52,6 +53,7 @@ async def publish_driver_approaching(trip_id: int, driver_name: str) -> None:
         topic=f"rides/{trip_id}/status",
         event_type="DRIVER_APPROACHING",
         payload={"trip_id": trip_id, "status": "DRIVER_ASSIGNED", "driver_name": driver_name},
+        retain=True,
     )
 
 
@@ -60,6 +62,7 @@ async def publish_driver_arrived(trip_id: int, driver_name: str) -> None:
         topic=f"rides/{trip_id}/status",
         event_type="DRIVER_ARRIVED",
         payload={"trip_id": trip_id, "status": "DRIVER_ARRIVED", "driver_name": driver_name},
+        retain=True,
     )
 
 
@@ -68,6 +71,7 @@ async def publish_ride_started(trip_id: int) -> None:
         topic=f"rides/{trip_id}/status",
         event_type="RIDE_STARTED",
         payload={"trip_id": trip_id, "status": "IN_PROGRESS"},
+        retain=True,
     )
 
 
@@ -76,6 +80,7 @@ async def publish_ride_completed(trip_id: int) -> None:
         topic=f"rides/{trip_id}/status",
         event_type="RIDE_COMPLETED",
         payload={"trip_id": trip_id, "status": "COMPLETED"},
+        retain=True,
     )
 
 

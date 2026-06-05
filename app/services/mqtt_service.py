@@ -22,12 +22,12 @@ def _make_event(event_type: str, payload: dict) -> str:
     return json.dumps(event)
 
 
-async def publish(topic: str, event_type: str, payload: dict) -> None:
+async def publish(topic: str, event_type: str, payload: dict, retain: bool = False) -> None:
     message = _make_event(event_type, payload)
     try:
         async with aiomqtt.Client(hostname=MQTT_HOST, port=MQTT_PORT) as client:
-            await client.publish(topic, payload=message, qos=1)
-            logger.info("MQTT published | topic=%s event=%s", topic, event_type)
+            await client.publish(topic, payload=message, qos=1, retain=retain)
+            logger.info("MQTT published | topic=%s event=%s retain=%s", topic, event_type, retain)
     except Exception as exc:
         logger.error("MQTT publish failed | topic=%s error=%s", topic, exc)
 
@@ -48,6 +48,7 @@ async def publish_ride_status(trip_id: int, status: str, extra: dict | None = No
         topic=f"rides/{trip_id}/status",
         event_type=f"RIDE_{status}",
         payload=payload,
+        retain=True,
     )
 
 

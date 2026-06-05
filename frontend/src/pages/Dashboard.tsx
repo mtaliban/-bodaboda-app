@@ -2069,24 +2069,9 @@ function TripStatusView({ trip: initialTrip, onNewTrip, onViewTrips }: {
     }
   }, [])); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fast poll (5s) while SEARCHING_DRIVER — catches DRIVER_ASSIGNED if MQTT event arrived before subscription
+  // Polling fallback (30s) — safety net only; MQTT retained messages handle real-time updates
   useEffect(() => {
-    if (trip.status !== 'SEARCHING_DRIVER') return;
-    const id = setInterval(async () => {
-      try {
-        const { data } = await api.get<Trip>(`/trips/${trip.id}`);
-        if (data.status !== 'SEARCHING_DRIVER') {
-          setTrip(data);
-          if (data.assigned_driver?.id) setDriverId(data.assigned_driver.id);
-        }
-      } catch {}
-    }, 5000);
-    return () => clearInterval(id);
-  }, [trip.id, trip.status]);
-
-  // Polling fallback (30s) for other active statuses
-  useEffect(() => {
-    if (!ACTIVE_TRIP_STATUSES.includes(trip.status) || trip.status === 'SEARCHING_DRIVER') return;
+    if (!ACTIVE_TRIP_STATUSES.includes(trip.status)) return;
     const interval = setInterval(async () => {
       try {
         const { data } = await api.get<Trip>(`/trips/${trip.id}`);
