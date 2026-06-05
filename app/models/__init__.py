@@ -12,6 +12,7 @@ from app.models.email_verification import EmailVerification
 from app.models.chat_message import ChatMessage
 from app.models.wallet import WalletTransaction
 from app.models.virtual_card import VirtualCard
+from app.models.admin_earning import AdminEarning
 
 __all__ = [
     "User", "UserRole", "UserStatus",
@@ -28,4 +29,5 @@ __all__ = [
     "ChatMessage",
     "WalletTransaction",
     "VirtualCard",
+    "AdminEarning",
 ]

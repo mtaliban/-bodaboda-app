@@ -6,8 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.deps import get_current_user
+from app.models.driver import Driver
+from app.models.driver_profile import DriverProfile
 from app.models.rider_profile import RiderProfile
-from app.models.user import User
+from app.models.trip import Trip, TripStatus
+from app.models.user import User, UserRole
 from app.schemas.driver import DriverOut, OfferOut, AcceptOfferResponse, DeclineOfferResponse
 from app.schemas.trip import TripOut, build_trip_out
 from app.services.driver_service import DriverService
@@ -139,6 +142,38 @@ async def accept_offer(
         driver=DriverOut.model_validate(result["driver"]),
         next_action="Go to pickup location",
     )
+
+
+@router.get("/trips", response_model=list[TripOut])
+async def get_driver_trips(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.role != UserRole.DRIVER:
+        from fastapi import HTTPException, status
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Drivers only")
+
+    profile_result = await db.execute(
+        select(DriverProfile).where(DriverProfile.user_id == current_user.id)
+    )
+    profile = profile_result.scalar_one_or_none()
+    if not profile:
+        return []
+
+    driver_result = await db.execute(
+        select(Driver).where(Driver.driver_profile_id == profile.id)
+    )
+    driver = driver_result.scalar_one_or_none()
+    if not driver:
+        return []
+
+    result = await db.execute(
+        select(Trip)
+        .where(Trip.driver_id == driver.id)
+        .order_by(Trip.created_at.desc())
+    )
+    trips = result.scalars().all()
+    return [build_trip_out(t) for t in trips]
 
 
 @router.post("/offers/{offer_id}/decline", response_model=DeclineOfferResponse)

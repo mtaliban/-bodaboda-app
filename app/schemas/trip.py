@@ -71,6 +71,7 @@ class TripOut(BaseModel):
     ride_type: RideType
     payment_method: PaymentMethod
     status: TripStatus
+    fare_tzs: Optional[int] = None
     message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -117,6 +118,7 @@ def build_trip_out(trip: "Trip") -> TripOut:
         ride_type=trip.ride_type,
         payment_method=trip.payment_method,
         status=trip.status,
+        fare_tzs=trip.fare_tzs,
         message=TRIP_STATUS_MESSAGES.get(trip.status, ""),
         created_at=trip.created_at,
         updated_at=trip.updated_at,

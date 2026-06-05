@@ -35,6 +35,7 @@ from app.services.driver_service import DriverService
 from app.services.mqtt_service import publish_ride_requested, publish_ride_status
 from app.services.notification_service import NotificationService
 from app.models.wallet import WalletTransaction
+from app.models.admin_earning import AdminEarning
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -159,6 +160,13 @@ class TripService:
         await self._check_no_active_trip(rider_profile_id)
 
         now = datetime.now(timezone.utc)
+        # Calculate estimated fare before creating the trip object
+        _tmp_trip = type("T", (), {
+            "pickup_lat": data.pickup_lat, "pickup_lng": data.pickup_lng,
+            "destination_lat": data.destination_lat, "destination_lng": data.destination_lng,
+        })()
+        estimated_fare = _calc_fare(_tmp_trip)  # type: ignore[arg-type]
+
         trip = Trip(
             trip_name=_make_trip_name(data.pickup_address.strip(), data.destination_address.strip(), now),
             rider_id=rider_profile_id,
@@ -172,6 +180,7 @@ class TripService:
             ride_type=data.ride_type,
             payment_method=data.payment_method,
             status=TripStatus.SEARCHING_DRIVER,
+            fare_tzs=estimated_fare,
         )
         self.db.add(trip)
         await self.db.flush()
@@ -217,6 +226,7 @@ class TripService:
             "destination_lng":     trip.destination_lng,
             "ride_type":           trip.ride_type.value,
             "payment_method":      trip.payment_method.value,
+            "fare_tzs":            trip.fare_tzs,
         })
 
         return trip
@@ -386,6 +396,7 @@ class TripService:
         trip.status = TripStatus.COMPLETED
         driver.status = DriverStatus.AVAILABLE
         driver.current_trip_id = None
+        driver.total_trips = (driver.total_trips or 0) + 1
 
         self.db.add(TripStatusHistory(
             trip_id=trip.id,
@@ -393,9 +404,13 @@ class TripService:
             changed_by=ChangedBy.DRIVER,
         ))
 
-        # Auto-deduct fare from rider's wallet
+        # Use stored fare (or recalculate if missing)
         from app.models.rider_profile import RiderProfile
-        fare = _calc_fare(trip)
+        fare = Decimal(str(trip.fare_tzs if trip.fare_tzs else _calc_fare(trip)))
+        admin_cut = (fare * Decimal("0.10")).to_integral_value()
+        driver_cut = fare - admin_cut
+
+        # Deduct full fare from rider wallet
         rp_result = await self.db.execute(
             select(RiderProfile).where(RiderProfile.id == trip.rider_id)
         )
@@ -419,9 +434,33 @@ class TripService:
                 trip_id=trip.id,
                 description=desc[:200],
             ))
-            wallet_msg = f"TSh {fare:,} imekatwa kwa safari yako."
+            wallet_msg = f"TSh {int(fare):,} imekatwa kwa safari yako."
         else:
             wallet_msg = "Safari imekamilika."
+
+        # Credit 90% to driver wallet
+        driver_user_result = await self.db.execute(
+            select(User).where(User.id == driver.user_id)
+        )
+        driver_user = driver_user_result.scalar_one_or_none()
+        if driver_user is not None:
+            d_old_bal = Decimal(str(driver_user.wallet_balance)) if driver_user.wallet_balance is not None else Decimal('0')
+            d_new_bal = d_old_bal + Decimal(str(driver_cut))
+            driver_user.wallet_balance = d_new_bal
+            self.db.add(WalletTransaction(
+                user_id=driver_user.id,
+                type="CREDIT",
+                amount=Decimal(str(driver_cut)),
+                balance_after=d_new_bal,
+                trip_id=trip.id,
+                description=f"Mapato safari #{trip.id} (90%) — {(trip.pickup_address or '')[:60]} → {(trip.destination_address or '')[:60]}",
+            ))
+
+        # Record 10% admin cut
+        self.db.add(AdminEarning(
+            trip_id=trip.id,
+            amount=Decimal(str(admin_cut)),
+        ))
 
         await self.notif_svc.create(
             recipient_role="RIDER",
@@ -431,6 +470,15 @@ class TripService:
             type="TRIP_COMPLETED",
             related_trip_id=trip.id,
         )
+        if driver_user is not None:
+            await self.notif_svc.create(
+                recipient_role="DRIVER",
+                recipient_profile_id=driver.driver_profile_id,
+                title="Umepata malipo",
+                message=f"TSh {int(driver_cut):,} imeingizwa kwenye mkoba wako.",
+                type="TRIP_COMPLETED",
+                related_trip_id=trip.id,
+            )
 
         await self.db.commit()
         await self.db.refresh(trip)

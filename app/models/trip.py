@@ -64,6 +64,7 @@ class Trip(Base):
         nullable=False,
         default=TripStatus.SEARCHING_DRIVER,
     )
+    fare_tzs: Mapped[Optional[int]] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
     )
