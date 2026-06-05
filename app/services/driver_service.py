@@ -236,6 +236,17 @@ class DriverService:
         await self.db.refresh(driver)
         await self.db.refresh(trip)
 
+        # Reload trip with relationships so the router can call build_trip_out
+        full_trip_result = await self.db.execute(
+            select(Trip)
+            .where(Trip.id == trip.id)
+            .options(
+                selectinload(Trip.assigned_driver),
+                selectinload(Trip.status_history),
+            )
+        )
+        full_trip = full_trip_result.scalar_one()
+
         await publish_ride_status(trip.id, "DRIVER_ASSIGNED", {
             "driver_id":   driver.id,
             "driver_name": driver.full_name,
@@ -243,7 +254,7 @@ class DriverService:
             "plate":       driver.plate_number,
         })
 
-        return {"offer": offer, "trip": trip, "driver": driver}
+        return {"offer": offer, "trip": full_trip, "driver": driver}
 
     async def decline_offer(self, user: User, offer_id: int) -> dict:
         driver = await self.get_driver_or_raise(user)

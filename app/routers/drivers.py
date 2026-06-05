@@ -121,19 +121,7 @@ async def accept_offer(
     svc = DriverService(db)
     result = await svc.accept_offer(current_user, offer_id)
 
-    trip = result["trip"]
-    trip_out = TripOut(
-        id=trip.id,
-        rider_id=trip.rider_id,
-        driver_id=trip.driver_id,
-        pickup_address=trip.pickup_address,
-        destination_address=trip.destination_address,
-        ride_type=trip.ride_type,
-        payment_method=trip.payment_method,
-        status=trip.status,
-        created_at=trip.created_at,
-        updated_at=trip.updated_at,
-    )
+    trip_out = build_trip_out(result["trip"])
 
     return AcceptOfferResponse(
         message="Trip accepted successfully",

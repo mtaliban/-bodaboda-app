@@ -337,7 +337,9 @@ export default function DriverDashboard() {
     setActing(true); setError('');
     try {
       const { data } = await api.post(`/drivers/offers/${offer.id}/accept`);
-      setDriver(data.driver); setOffer(null);
+      if (data.trip) setCurrentTrip(data.trip as TripSummary);
+      setDriver(data.driver);
+      setOffer(null);
     } catch (e: unknown) {
       setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Imeshindwa kukubali.');
       await fetchOffer();
