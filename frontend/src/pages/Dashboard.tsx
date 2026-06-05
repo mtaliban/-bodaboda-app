@@ -811,7 +811,7 @@ function CurrentTripCard({ trip, actionLoading, onAction, driverName }: CurrentT
     return new Promise(resolve => {
       const timer = setTimeout(() => resolve(fallback), 1500);
       navigator.geolocation.getCurrentPosition(
-        ({ coords }) => { clearTimeout(timer); resolve({ lat: coords.latitude, lng: coords.longitude }); },
+        ({ coords }) => { clearTimeout(timer); resolve({ lat: coords.latitude, lng: coords.longitude, address: fallback.address }); },
         () => { clearTimeout(timer); resolve(fallback); },
         { enableHighAccuracy: false, timeout: 1500 }
       );
@@ -984,8 +984,18 @@ function DriverHomePanel() {
     return () => navigator.geolocation.clearWatch(geoId);
   }, []);
 
-  const publishGpsEvent = useCallback((topic: string, eventType: string, extraPayload?: Record<string, unknown>) => {
-    const { lat, lng, address } = lastGpsRef.current;
+  const publishGpsEvent = useCallback(async (topic: string, eventType: string, extraPayload?: Record<string, unknown>) => {
+    let { lat, lng, address } = lastGpsRef.current;
+    if (!address && lat && lng) {
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=sw`);
+        const d = await r.json() as { display_name?: string; address?: { road?: string; suburb?: string; city?: string; town?: string; village?: string } };
+        const a = d.address;
+        address = [a?.road, a?.suburb ?? a?.village ?? a?.town ?? a?.city].filter(Boolean).join(', ')
+               || d.display_name?.split(',').slice(0, 2).join(', ') || '';
+        if (address) lastGpsRef.current = { lat, lng, address };
+      } catch { /* publish without address */ }
+    }
     publishStatus(topic, {
       event_id:   `${eventType}_${Date.now()}`,
       event_type: eventType,
@@ -1060,7 +1070,7 @@ function DriverHomePanel() {
       setIncomingTrip(null);
       setMsg('Umekubali safari! Nenda pickup point.');
       if (driver) {
-        publishGpsEvent(`rides/${tripId}/status`, 'RIDE_ACCEPTED', { trip_id: tripId, driver_id: driver.id, driver_name: driver.full_name });
+        await publishGpsEvent(`rides/${tripId}/status`, 'RIDE_ACCEPTED', { trip_id: tripId, driver_id: driver.id, driver_name: driver.full_name });
       }
       setMsgType('success');
       await refreshDriver();
@@ -1083,13 +1093,13 @@ function DriverHomePanel() {
     try {
       const { data } = await driverApi.post<Trip>(`/driver/trips/${currentTrip.id}/${action}`);
       if (action === 'complete') {
-        publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_COMPLETED', { trip_id: currentTrip.id, driver_id: driver?.id });
+        await publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_COMPLETED', { trip_id: currentTrip.id, driver_id: driver?.id });
         setCurrentTrip(null);
         setMsg('Safari imekamilika! Uko tayari tena.');
         setMsgType('success');
         await refreshDriver();
       } else {
-        publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_STARTED', { trip_id: currentTrip.id, driver_id: driver?.id });
+        await publishGpsEvent(`rides/${currentTrip.id}/status`, 'RIDE_STARTED', { trip_id: currentTrip.id, driver_id: driver?.id });
         setCurrentTrip(data);
       }
     } catch (err) {
