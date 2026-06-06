@@ -293,19 +293,13 @@ export default function AdminPage() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui,sans-serif', paddingBottom: 68 }}>
+    <div>
 
-      {/* Top header — same gradient style as rider/driver */}
-      <div style={{ background: 'linear-gradient(135deg,#1e3a5f 0%,#FF6B00 100%)', color: '#fff', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-          {profileImg
-            ? <img src={profileImg} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.4)' }} />
-            : <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1rem', border: '2px solid rgba(255,255,255,0.3)' }}>{profileName.charAt(0)}</div>
-          }
-          <div>
-            <div style={{ fontWeight: 800, fontSize: '0.92rem', lineHeight: 1.2 }}>🛡️ BodaBoda Admin</div>
-            <div style={{ fontSize: '0.68rem', opacity: 0.82, lineHeight: 1.3 }}>{profileName}</div>
-          </div>
+      {/* Admin top header — same height as Navbar (var(--nav-h)) so spa-sidebar sticks correctly */}
+      <div style={{ position: 'sticky', top: 0, zIndex: 150, height: 'var(--nav-h, 68px)', background: 'linear-gradient(135deg,#1e3a5f 0%,#FF6B00 100%)', color: '#fff', display: 'flex', alignItems: 'center', padding: '0 1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.18)', gap: '0.6rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+          <span style={{ fontSize: '1.35rem' }}>🛡️</span>
+          <span style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em' }}>BodaBoda Admin</span>
         </div>
         <button onClick={logout} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '0.38rem 0.8rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
@@ -313,9 +307,40 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* Scrollable content — same max-width + padding as Dashboard panels */}
-      <div style={{ maxWidth: 480, margin: '0 auto', padding: '1rem 0.75rem' }}>
-        {apiError && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{apiError}</div>}
+      {/* Same spa-layout as Dashboard: sidebar on desktop, content on right */}
+      <div className="spa-layout">
+
+        {/* Left sidebar — desktop only */}
+        <aside className="spa-sidebar">
+          <div className="spa-sidebar-user">
+            <div className="spa-sidebar-avatar">
+              {profileImg ? <img src={profileImg} alt="" /> : profileName.charAt(0).toUpperCase()}
+            </div>
+            <div className="spa-sidebar-name">{profileName}</div>
+            <div className="spa-sidebar-role">ADMIN</div>
+          </div>
+          <nav className="spa-nav">
+            {navItems.map(item => (
+              <button key={item.id} onClick={() => setTab(item.id)}
+                className={`spa-nav-item${tab === item.id ? ' active' : ''}`}>
+                <span className="spa-nav-icon" style={{ fontSize: '1rem', opacity: 1 }}>{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+            <div className="spa-nav-divider" />
+            <button onClick={logout} className="spa-nav-item spa-logout">
+              <span className="spa-nav-icon">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+              </span>
+              Toka
+            </button>
+          </nav>
+        </aside>
+
+        {/* Content area */}
+        <div className="spa-content">
+          <div className="spa-content-inner" style={{ padding: '1.25rem 1rem', maxWidth: 920, margin: '0 auto' }}>
+            {apiError && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{apiError}</div>}
         {loading && <div style={{ textAlign: 'center', padding: '3rem' }}><div className="spinner" /></div>}
 
         {/* ── Stats ── */}
@@ -696,17 +721,27 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+          </div>
+        </div>
       </div>
 
-      {/* Bottom nav — same style as rider/driver Dashboard */}
-      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid #e5e7eb', display: 'flex', zIndex: 100, paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        {navItems.map(item => (
-          <button key={item.id} onClick={() => setTab(item.id)}
-            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.45rem 0.15rem 0.35rem', background: 'none', border: 'none', cursor: 'pointer', color: tab === item.id ? '#FF6B00' : '#9ca3af', minWidth: 0 }}>
-            <span style={{ fontSize: '1.05rem', lineHeight: 1 }}>{item.icon}</span>
-            <span style={{ fontSize: '0.57rem', marginTop: '0.18rem', fontWeight: tab === item.id ? 700 : 500, lineHeight: 1, whiteSpace: 'nowrap' }}>{item.label}</span>
+      {/* Mobile bottom nav — hidden on desktop, shown on mobile (same as Dashboard) */}
+      <nav className="spa-bottom-nav">
+        <div className="spa-bottom-nav-inner">
+          {navItems.map(item => (
+            <button key={item.id} onClick={() => setTab(item.id)}
+              className={`spa-bottom-item${tab === item.id ? ' active' : ''}`}>
+              <span className="spa-bottom-item-icon" style={{ fontSize: '1.1rem' }}>{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+          <button onClick={logout} className="spa-bottom-item spa-logout">
+            <span className="spa-bottom-item-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+            </span>
+            Toka
           </button>
-        ))}
+        </div>
       </nav>
 
       {/* Edit User Modal */}
@@ -782,7 +817,7 @@ export default function AdminPage() {
 
       {/* Toast */}
       {actionMsg && (
-        <div onClick={() => setActionMsg('')} style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: '#1e3a5f', color: '#fff', padding: '0.75rem 1.5rem', borderRadius: 10, fontSize: '0.85rem', zIndex: 2000, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
+        <div onClick={() => setActionMsg('')} style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', background: '#1e3a5f', color: '#fff', padding: '0.75rem 1.5rem', borderRadius: 10, fontSize: '0.85rem', zIndex: 2000, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
           {actionMsg}
         </div>
       )}

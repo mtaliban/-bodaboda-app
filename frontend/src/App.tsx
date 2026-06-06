@@ -48,7 +48,7 @@ function AppShell() {
     <>
       <PageTracker />
       {!isAdmin && <Navbar />}
-      <main>
+      <main style={isAdmin ? { paddingTop: 0, minHeight: '100vh' } : {}}>
           <Routes>
             <Route path="/" element={<PublicRoute><Home /></PublicRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
