@@ -126,6 +126,10 @@ export default function AdminPage() {
   const [walletSubTab, setWalletSubTab] = useState<'earnings'|'txns'|'cards'>('earnings');
   const [adminEarnings, setAdminEarnings] = useState<{ total: number; count: number; earnings: Record<string,unknown>[] }>({ total: 0, count: 0, earnings: [] });
   const [loading, setLoading]   = useState(false);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersMeta, setUsersMeta] = useState<{ total: number; limit: number }>({ total: 0, limit: 100 });
+  const [tripsPage, setTripsPage] = useState(1);
+  const [tripsMeta, setTripsMeta] = useState<{ total: number; limit: number }>({ total: 0, limit: 100 });
   const [apiError, setApiError] = useState('');
   const [actionMsg, setActionMsg] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
@@ -155,11 +159,41 @@ export default function AdminPage() {
 
   const toast = (msg: string) => { setActionMsg(msg); setTimeout(() => setActionMsg(''), 3000); };
 
+  const loadUsers = useCallback(async (page = 1) => {
+    try {
+      const data = await api(`/admin/users?limit=30&page=${page}`);
+      setUsers(data.users);
+      setUsersMeta({ total: data.total, limit: 30 });
+    } catch {}
+  }, [api]);
+
+  const loadTrips = useCallback(async (page = 1) => {
+    try {
+      const data = await api(`/admin/trips?limit=30&page=${page}`);
+      setTrips(data.trips);
+      setTripsMeta({ total: data.total, limit: 30 });
+    } catch {}
+  }, [api]);
+
   useEffect(() => {
     if (!token) return;
     setLoading(true); setApiError('');
-    Promise.all([api('/admin/stats'), api('/admin/users?limit=100'), api('/admin/trips?limit=100'), api('/admin/drivers'), api('/admin/events/history?limit=200'), api('/admin/wallet/transactions'), api('/admin/wallet/cards'), api('/admin/earnings')])
-      .then(([s, u, t, d, eh, wt, wc, ae]) => { setStats(s); setUsers(u.users); setTrips(t.trips); setDrivers(d); setHistEvents(eh); setWalletTxns(wt); setWalletCards(wc); setAdminEarnings(ae); })
+    Promise.all([
+      api('/admin/stats'),
+      api('/admin/users?limit=30&page=1'),
+      api('/admin/trips?limit=30&page=1'),
+      api('/admin/drivers'),
+      api('/admin/events/history?limit=200'),
+      api('/admin/wallet/transactions'),
+      api('/admin/wallet/cards'),
+      api('/admin/earnings'),
+    ])
+      .then(([s, u, t, d, eh, wt, wc, ae]) => {
+        setStats(s);
+        setUsers(u.users); setUsersMeta({ total: u.total, limit: 30 });
+        setTrips(t.trips); setTripsMeta({ total: t.total, limit: 30 });
+        setDrivers(d); setHistEvents(eh); setWalletTxns(wt); setWalletCards(wc); setAdminEarnings(ae);
+      })
       .catch(err => {
         const status = err?.response?.status;
         if (status === 401 || status === 403) setToken('');
@@ -172,7 +206,19 @@ export default function AdminPage() {
     const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${wsProto}://${window.location.host}/admin-api/admin/ws?token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
-    ws.onmessage = e => { try { const ev = JSON.parse(e.data as string) as LiveEvent; setLiveEvents(p => [ev, ...p].slice(0, 200)); } catch {} };
+    ws.onmessage = e => {
+      try {
+        const ev = JSON.parse(e.data as string) as LiveEvent;
+        setLiveEvents(p => [ev, ...p].slice(0, 200));
+        if (ev.event_type === 'PAYMENT_DONE') {
+          const p = ev.payload as Record<string, unknown>;
+          if (String(p.for_role) === 'ADMIN') {
+            const amount = Number(p.amount);
+            toast(`💼 +TSh ${amount.toLocaleString()} mapato ya platform — safari #${p.trip_id}`);
+          }
+        }
+      } catch {}
+    };
     return () => { ws.close(); wsRef.current = null; };
   }, [token]);
 
@@ -278,6 +324,40 @@ export default function AdminPage() {
 
   const thStyle: React.CSSProperties = { padding: '0.6rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', fontSize: '0.78rem', background: '#f8fafc', whiteSpace: 'nowrap' };
   const tdStyle: React.CSSProperties = { padding: '0.55rem 0.875rem', fontSize: '0.8rem', borderBottom: '1px solid #f3f4f6', verticalAlign: 'middle' };
+  const actionsTd: React.CSSProperties = { ...tdStyle, minWidth: 120 };
+
+  function IBtn({ onClick, title, color, children }: { onClick: () => void; title: string; color: string; children: React.ReactNode }) {
+    return (
+      <button onClick={onClick} title={title}
+        style={{ background: color + '18', color, border: `1px solid ${color}30`, borderRadius: 6, padding: '0.3rem 0.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {children}
+      </button>
+    );
+  }
+
+  function Pagination({ page, total, limit, onPage }: { page: number; total: number; limit: number; onPage: (p: number) => void }) {
+    const pages = Math.max(1, Math.ceil(total / limit));
+    if (pages <= 1) return null;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.75rem 1rem', borderTop: '1px solid #f3f4f6', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        <button onClick={() => onPage(page - 1)} disabled={page <= 1}
+          style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: page <= 1 ? '#f9fafb' : '#fff', cursor: page <= 1 ? 'default' : 'pointer', fontSize: '0.8rem', color: '#374151' }}>‹</button>
+        {Array.from({ length: pages }, (_, i) => i + 1).filter(p => p === 1 || p === pages || Math.abs(p - page) <= 1).reduce<(number|string)[]>((acc, p, i, arr) => {
+          if (i > 0 && (p as number) - (arr[i-1] as number) > 1) acc.push('…');
+          acc.push(p);
+          return acc;
+        }, []).map((p, i) => (
+          <button key={i} onClick={() => typeof p === 'number' && onPage(p)} disabled={p === page || typeof p !== 'number'}
+            style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: p === page ? '#FF6B00' : '#fff', color: p === page ? '#fff' : '#374151', fontWeight: p === page ? 700 : 400, cursor: typeof p !== 'number' ? 'default' : 'pointer', fontSize: '0.8rem' }}>
+            {p}
+          </button>
+        ))}
+        <button onClick={() => onPage(page + 1)} disabled={page >= pages}
+          style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: page >= pages ? '#f9fafb' : '#fff', cursor: page >= pages ? 'default' : 'pointer', fontSize: '0.8rem', color: '#374151' }}>›</button>
+        <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.25rem' }}>{total} rekodi</span>
+      </div>
+    );
+  }
 
   // Redirect to shared login page if not authenticated
   if (!token) return <Navigate to="/login" replace />;
@@ -377,17 +457,25 @@ export default function AdminPage() {
                       <td style={tdStyle}><Badge text={u.role} color="#8b5cf6" /></td>
                       <td style={tdStyle}><Badge text={u.status} color="#10b981" /></td>
                       <td style={{ ...tdStyle, color: '#9ca3af' }}>{fmtDate(u.created_at)}</td>
-                      <td style={{ ...tdStyle }}>
+                      <td style={actionsTd}>
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          <button onClick={() => { setEditUser(u); setEditUserForm({ full_name: u.full_name, email: u.email, phone: u.phone ?? '', role: u.role, status: u.status }); }}
-                            style={{ background: '#eff6ff', color: '#2563eb', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✏️ Edit</button>
-                          <button onClick={() => { setResetPwdUser(u); setNewPassword(''); }}
-                            style={{ background: '#f5f3ff', color: '#7c3aed', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>🔑</button>
+                          <IBtn title="Hariri" color="#2563eb" onClick={() => { setEditUser(u); setEditUserForm({ full_name: u.full_name, email: u.email, phone: u.phone ?? '', role: u.role, status: u.status }); }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 1.42H5v-.71l9.06-9.06.71.71-8.85 9.06zm14.29-12.3a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                          </IBtn>
+                          <IBtn title="Badilisha Nywila" color="#7c3aed" onClick={() => { setResetPwdUser(u); setNewPassword(''); }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
+                          </IBtn>
                           {u.status === 'active'
-                            ? <button onClick={() => updateUserStatus(u.id, 'suspended')} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>⛔</button>
-                            : <button onClick={() => updateUserStatus(u.id, 'active')} style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✅</button>}
-                          <button onClick={() => deleteUser(u.id, u.full_name)}
-                            style={{ background: '#fef2f2', color: '#dc2626', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>🗑️</button>
+                            ? <IBtn title="Simamisha Akaunti" color="#dc2626" onClick={() => updateUserStatus(u.id, 'suspended')}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9V8h2v9zm4 0h-2V8h2v9z"/></svg>
+                              </IBtn>
+                            : <IBtn title="Wezesha Akaunti" color="#16a34a" onClick={() => updateUserStatus(u.id, 'active')}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                              </IBtn>
+                          }
+                          <IBtn title="Futa Akaunti" color="#dc2626" onClick={() => deleteUser(u.id, u.full_name)}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                          </IBtn>
                         </div>
                       </td>
                     </tr>
@@ -395,6 +483,7 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={usersPage} total={usersMeta.total} limit={usersMeta.limit} onPage={async p => { setUsersPage(p); await loadUsers(p); }} />
           </div>
         )}
 
@@ -427,6 +516,7 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={tripsPage} total={tripsMeta.total} limit={tripsMeta.limit} onPage={async p => { setTripsPage(p); await loadTrips(p); }} />
           </div>
         )}
 
@@ -453,10 +543,19 @@ export default function AdminPage() {
                       <td style={tdStyle}>{d.rating?.toFixed(1) ?? '—'} ⭐</td>
                       <td style={{ ...tdStyle }}>
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          <button onClick={() => { setEditDriver(d); setEditDriverForm({ full_name: d.full_name, email: d.email ?? '', phone: d.phone ?? '', vehicle_model: d.vehicle_model ?? '', plate_number: d.plate_number ?? '', license_number: d.license_number ?? '', verification_status: d.verification_status, status: d.driver_status ?? '' }); }}
-                            style={{ background: '#eff6ff', color: '#2563eb', border: 'none', padding: '0.22rem 0.55rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✏️ Edit</button>
-                          {d.verification_status !== 'VERIFIED' && <button onClick={() => verifyDriver(d.profile_id, 'VERIFIED')} style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', padding: '0.22rem 0.5rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✓</button>}
-                          {d.verification_status !== 'REJECTED' && <button onClick={() => verifyDriver(d.profile_id, 'REJECTED')} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', padding: '0.22rem 0.5rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>✕</button>}
+                          <IBtn title="Hariri" color="#2563eb" onClick={() => { setEditDriver(d); setEditDriverForm({ full_name: d.full_name, email: d.email ?? '', phone: d.phone ?? '', vehicle_model: d.vehicle_model ?? '', plate_number: d.plate_number ?? '', license_number: d.license_number ?? '', verification_status: d.verification_status, status: d.driver_status ?? '' }); }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 1.42H5v-.71l9.06-9.06.71.71-8.85 9.06zm14.29-12.3a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                          </IBtn>
+                          {d.verification_status !== 'VERIFIED' && (
+                            <IBtn title="Thibitisha Dereva" color="#16a34a" onClick={() => verifyDriver(d.profile_id, 'VERIFIED')}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                            </IBtn>
+                          )}
+                          {d.verification_status !== 'REJECTED' && (
+                            <IBtn title="Kataa Dereva" color="#dc2626" onClick={() => verifyDriver(d.profile_id, 'REJECTED')}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                            </IBtn>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -664,11 +763,17 @@ export default function AdminPage() {
                               {String(expM).padStart(2,'0')}/{expY}{isExpired ? ' ⚠️' : ''}
                             </td>
                             <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>{c.created_at ? new Date(String(c.created_at)).toLocaleString() : ''}</td>
-                            <td style={tdStyle}>
-                              <div style={{ display:'flex', gap:'0.3rem' }}>
-                                <button onClick={() => extendCard(c.id, 12)} style={{ background:'#dbeafe', color:'#1d4ed8', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>+12M</button>
-                                <button onClick={() => extendCard(c.id, 24)} style={{ background:'#ede9fe', color:'#7c3aed', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>+24M</button>
-                                <button onClick={() => burnCard(c.id, String(c.user_name ?? ''))} style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>🔥</button>
+                            <td style={actionsTd}>
+                              <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                                <IBtn title="Ongeza miezi 12" color="#1d4ed8" onClick={() => extendCard(c.id, 12)}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zm-7-9h-2v3H8v2h2v3h2v-3h2v-2h-2z"/></svg>
+                                </IBtn>
+                                <IBtn title="Ongeza miezi 24" color="#7c3aed" onClick={() => extendCard(c.id, 24)}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+                                </IBtn>
+                                <IBtn title="Futa Kadi" color="#dc2626" onClick={() => burnCard(c.id, String(c.user_name ?? ''))}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                                </IBtn>
                               </div>
                             </td>
                           </tr>

@@ -2547,6 +2547,7 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
         payment_method: 'CASH',
       });
       setTrip(data);
+      window.dispatchEvent(new CustomEvent('rider-trip-created', { detail: { tripId: data.id } }));
     } catch (err) { setError(extractApiError(err)); }
     setIsLoading(false);
   };
@@ -3360,6 +3361,50 @@ function BottomNav({ user, activeTab, setActiveTab, onLogout, unreadCount }: {
 
 // ── Driver Offer Watcher (always mounted for driver, any tab) ─────────
 
+function RiderPaymentWatcher() {
+  const [activeTripId, setActiveTripId] = useState<number | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<Trip[]>('/trips/my')
+      .then(({ data }) => {
+        const active = data.find(t => [...ACTIVE_TRIP_STATUSES, 'COMPLETED'].includes(t.status));
+        if (active) setActiveTripId(active.id);
+      })
+      .catch(() => {});
+    const handler = (e: Event) => {
+      const { tripId } = (e as CustomEvent<{ tripId: number }>).detail;
+      setActiveTripId(tripId);
+    };
+    window.addEventListener('rider-trip-created', handler);
+    return () => window.removeEventListener('rider-trip-created', handler);
+  }, []);
+
+  useMqtt(activeTripId ? [`rides/${activeTripId}/payment`] : [], useCallback((event: MqttEvent) => {
+    if (event.event_type === 'PAYMENT_DONE') {
+      const p = event.payload as Record<string, unknown>;
+      if (String(p.for_role) === 'RIDER') {
+        const amount = Number(p.amount);
+        setToast(`💸 TSh ${amount.toLocaleString()} imekatwa kwa safari yako`);
+        setTimeout(() => { setToast(null); setActiveTripId(null); }, 6000);
+      }
+    }
+  }, [])); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!toast) return null;
+  return (
+    <div style={{
+      position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+      background: 'linear-gradient(135deg, #1e3a5f, #0369a1)', color: '#fff', borderRadius: 12,
+      padding: '0.65rem 1.1rem', fontSize: '0.95rem', fontWeight: 700, zIndex: 2000,
+      maxWidth: '90vw', boxShadow: '0 4px 20px rgba(3,105,161,0.45)',
+      display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap',
+    }}>
+      {toast}
+    </div>
+  );
+}
+
 function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
   activeTab: Tab;
   setActiveTab: (t: Tab) => void;
@@ -3577,6 +3622,7 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {isRider  && <RiderPaymentWatcher />}
       {isDriver && (
         <DriverOfferWatcher activeTab={activeTab} setActiveTab={handleTabChange} />
       )}
