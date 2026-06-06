@@ -16,30 +16,33 @@ interface HistEvent { id: number; trip_id: number; event_type: string; changed_b
 function fmtDate(s: string) { return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
 function fmtTime(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
+function blobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); document.body.removeChild(a); }, 150);
+}
+
 function exportCsv(rows: Record<string, unknown>[], filename: string) {
   if (!rows.length) return;
   const cols = Object.keys(rows[0]);
   const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csv = '﻿' + [cols.map(escape).join(','), ...rows.map(r => cols.map(c => escape(r[c])).join(','))].join('\r\n');
-  const a = document.createElement('a');
-  a.href = `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
-  a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  const base = filename.replace(/\.(xlsx?|csv)$/i, '');
+  blobDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `${base}.csv`);
 }
 
 function exportExcel(rows: Record<string, unknown>[], filename: string) {
   if (!rows.length) return;
   const ws = XLSX.utils.json_to_sheet(rows);
-  // Auto column widths based on content
   const cols = Object.keys(rows[0]);
   ws['!cols'] = cols.map(col => {
-    const maxLen = Math.max(
-      col.length,
-      ...rows.map(r => String(r[col] ?? '').length),
-    );
+    const maxLen = Math.max(col.length, ...rows.map(r => String(r[col] ?? '').length));
     return { wch: Math.min(Math.max(maxLen + 2, 10), 60) };
   });
-  // Bold header row
   const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
   for (let C = range.s.c; C <= range.e.c; C++) {
     const addr = XLSX.utils.encode_cell({ r: 0, c: C });
@@ -48,7 +51,11 @@ function exportExcel(rows: Record<string, unknown>[], filename: string) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Data');
   const base = filename.replace(/\.(xlsx?|csv)$/i, '');
-  XLSX.writeFile(wb, `${base}.xlsx`);
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  blobDownload(
+    new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+    `${base}.xlsx`,
+  );
 }
 
 function ExportBar({ rows, name }: { rows: Record<string, unknown>[]; name: string }) {
