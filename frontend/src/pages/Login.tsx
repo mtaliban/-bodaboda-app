@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../context/LanguageContext';
 import Alert from '../components/Alert';
 import axios, { AxiosError } from 'axios';
 import { trackClick } from '../metrics';
@@ -20,6 +21,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
 
   const { login } = useAuth();
+  const { t } = useLang();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -51,22 +53,22 @@ export default function Login() {
       <div className="auth-card">
         <div className="auth-header">
           <div className="auth-logo-wrap">🏍️</div>
-          <h1 className="auth-title">Welcome back</h1>
-          <p className="auth-sub">Login to your BodaBoda account</p>
+          <h1 className="auth-title">{t('auth.login.title')}</h1>
+          <p className="auth-sub">{t('auth.login.subtitle')}</p>
         </div>
 
         {justRegistered && (
-          <Alert type="success" message="Account created successfully! Login to get started." />
+          <Alert type="success" message={t('auth.login.successMsg')} />
         )}
         {error && <Alert type="error" message={error} />}
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
-            <label htmlFor="email_or_phone">Email or Phone Number</label>
+            <label htmlFor="email_or_phone">{t('auth.login.emailOrPhone')}</label>
             <input
               id="email_or_phone"
               type="text"
-              placeholder="john@example.com or +254700000000"
+              placeholder={t('auth.login.emailPlaceholder')}
               value={emailOrPhone}
               onChange={(e) => setEmailOrPhone(e.target.value)}
               required
@@ -76,15 +78,15 @@ export default function Login() {
 
           <div className="form-group">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">{t('auth.login.password')}</label>
               <Link to="/forgot-password" className="auth-link" style={{ fontSize: '0.8rem' }}>
-                Forgot password?
+                {t('auth.login.forgotPassword')}
               </Link>
             </div>
             <input
               id="password"
               type="password"
-              placeholder="Enter your password"
+              placeholder={t('auth.login.password')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -101,17 +103,17 @@ export default function Login() {
             {isLoading ? (
               <>
                 <span className="btn-spinner" />
-                Logging in…
+                {t('auth.login.submitting')}
               </>
             ) : (
-              'Login to BodaBoda'
+              t('auth.login.submit')
             )}
           </button>
         </form>
 
         <p className="auth-footer-text">
-          Don't have an account?{' '}
-          <Link to="/register" className="auth-link">Create one free</Link>
+          {t('auth.login.noAccount')}{' '}
+          <Link to="/register" className="auth-link">{t('auth.login.createFree')}</Link>
         </p>
       </div>
     </div>

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../context/LanguageContext';
 
 export default function Navbar() {
   const { isAuthenticated, isLoading } = useAuth();
+  const { t } = useLang();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -21,17 +23,15 @@ export default function Navbar() {
             <span className="brand-text">BodaBoda</span>
           </Link>
 
-          {/* Desktop links — only shown when logged out */}
           {!isLoading && !isAuthenticated && (
             <div className="navbar-links">
-              <Link to="/" className={`nav-link${location.pathname === '/' ? ' active' : ''}`}>Home</Link>
-              <Link to="/register" className={`nav-link${isActive('/register') ? ' active' : ''}`}>Register</Link>
-              <Link to="/login" className={`nav-link${isActive('/login') ? ' active' : ''}`}>Login</Link>
-              <Link to="/register" className="nav-cta">Get Started</Link>
+              <Link to="/" className={`nav-link${location.pathname === '/' ? ' active' : ''}`}>{t('nav.home')}</Link>
+              <Link to="/register" className={`nav-link${isActive('/register') ? ' active' : ''}`}>{t('nav.register')}</Link>
+              <Link to="/login" className={`nav-link${isActive('/login') ? ' active' : ''}`}>{t('nav.login')}</Link>
+              <Link to="/register" className="nav-cta">{t('nav.getStarted')}</Link>
             </div>
           )}
 
-          {/* Hamburger — only shown when logged out; logged-in users use bottom nav */}
           {!isLoading && !isAuthenticated && (
             <button
               className={`nav-hamburger${menuOpen ? ' open' : ''}`}
@@ -45,12 +45,11 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Mobile drawer — only for unauthenticated users */}
       {!isLoading && !isAuthenticated && (
         <div className={`nav-mobile${menuOpen ? ' open' : ''}`} aria-hidden={!menuOpen}>
-          <Link to="/" className="nav-link" onClick={close}>Home</Link>
-          <Link to="/register" className="nav-link" onClick={close}>Register</Link>
-          <Link to="/login" className="nav-link" onClick={close}>Login</Link>
+          <Link to="/" className="nav-link" onClick={close}>{t('nav.home')}</Link>
+          <Link to="/register" className="nav-link" onClick={close}>{t('nav.register')}</Link>
+          <Link to="/login" className="nav-link" onClick={close}>{t('nav.login')}</Link>
         </div>
       )}
     </>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import axios from 'axios';
+import { useLang } from '../context/LanguageContext';
 
 const ADMIN_API = `${window.location.protocol}//${window.location.host}/admin-api`;
 
@@ -146,6 +147,7 @@ export default function AdminPage() {
   const [showCreateCard, setShowCreateCard] = useState(false);
   const [createCardUserId, setCreateCardUserId] = useState('');
 
+  const { t, lang, setLang } = useLang();
   const [profileName, setProfileName]   = useState(() => localStorage.getItem('admin_display_name') || 'Admin');
   const [profileEmail, setProfileEmail] = useState(() => localStorage.getItem('admin_email') || '');
   const [profileImg, setProfileImg]     = useState(() => localStorage.getItem('admin_img') || '');
@@ -365,7 +367,7 @@ export default function AdminPage() {
         ))}
         <button onClick={() => onPage(page + 1)} disabled={page >= pages}
           style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: page >= pages ? '#f9fafb' : '#fff', cursor: page >= pages ? 'default' : 'pointer', fontSize: '0.8rem', color: '#374151' }}>›</button>
-        <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.25rem' }}>{total} rekodi</span>
+        <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.25rem' }}>{total} {t('admin.records')}</span>
       </div>
     );
   }
@@ -374,13 +376,13 @@ export default function AdminPage() {
   if (!token) return <Navigate to="/login" replace />;
 
   const navItems = [
-    { id: 'stats'    as const, icon: '📊', label: 'Stats'      },
-    { id: 'users'    as const, icon: '👥', label: 'Watumiaji'  },
-    { id: 'trips'    as const, icon: '🏍️', label: 'Safari'     },
-    { id: 'drivers'  as const, icon: '🪪', label: 'Madereva'   },
-    { id: 'wallet'   as const, icon: '💰', label: 'Wallet'     },
-    { id: 'events'   as const, icon: '⚡', label: 'Matukio'    },
-    { id: 'settings' as const, icon: '⚙️', label: 'Mipangilio' },
+    { id: 'stats'    as const, icon: '📊', label: t('admin.stats')    },
+    { id: 'users'    as const, icon: '👥', label: t('admin.users')    },
+    { id: 'trips'    as const, icon: '🏍️', label: t('admin.trips')    },
+    { id: 'drivers'  as const, icon: '🪪', label: t('admin.drivers')  },
+    { id: 'wallet'   as const, icon: '💰', label: t('admin.wallet')   },
+    { id: 'events'   as const, icon: '⚡', label: t('admin.events')   },
+    { id: 'settings' as const, icon: '⚙️', label: t('admin.settings') },
   ];
 
   return (
@@ -390,11 +392,11 @@ export default function AdminPage() {
       <div style={{ position: 'sticky', top: 0, zIndex: 150, height: 'var(--nav-h, 68px)', background: 'linear-gradient(135deg,#1e3a5f 0%,#FF6B00 100%)', color: '#fff', display: 'flex', alignItems: 'center', padding: '0 1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.18)', gap: '0.6rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
           <span style={{ fontSize: '1.35rem' }}>🛡️</span>
-          <span style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em' }}>BodaBoda Admin</span>
+          <span style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '-0.02em' }}>{t('admin.title')}</span>
         </div>
         <button onClick={logout} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '0.38rem 0.8rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
           <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-          Toka
+          {t('admin.logout')}
         </button>
       </div>
 
@@ -437,14 +439,14 @@ export default function AdminPage() {
         {/* ── Stats ── */}
         {!loading && tab === 'stats' && stats && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: '0.75rem' }}>
-            <StatCard label="Watumiaji Wote"     value={stats.total_users}           color="#3b82f6" />
-            <StatCard label="Warukaji"            value={stats.riders}                color="#8b5cf6" />
-            <StatCard label="Madereva"            value={stats.drivers}               color="#f59e0b" />
-            <StatCard label="Safari Zote"         value={stats.total_trips}           color="#6b7280" />
-            <StatCard label="Safari Hai"          value={stats.active_trips}          color="#FF6B00" />
-            <StatCard label="Zilizokamilika"      value={stats.completed_trips}       color="#10b981" />
-            <StatCard label="Zilizofutwa"         value={stats.cancelled_trips}       color="#ef4444" />
-            <StatCard label="Subiri Uthibitisho"  value={stats.pending_verifications} color="#f59e0b" />
+            <StatCard label={t('admin.totalUsers')}    value={stats.total_users}           color="#3b82f6" />
+            <StatCard label={t('admin.riders')}        value={stats.riders}                color="#8b5cf6" />
+            <StatCard label={t('admin.driversLbl')}    value={stats.drivers}               color="#f59e0b" />
+            <StatCard label={t('admin.totalTrips')}    value={stats.total_trips}           color="#6b7280" />
+            <StatCard label={t('admin.activeTrips')}   value={stats.active_trips}          color="#FF6B00" />
+            <StatCard label={t('admin.completedTrips')}value={stats.completed_trips}       color="#10b981" />
+            <StatCard label={t('admin.cancelledTrips')}value={stats.cancelled_trips}       color="#ef4444" />
+            <StatCard label={t('admin.pendingVerif')}  value={stats.pending_verifications} color="#f59e0b" />
           </div>
         )}
 
@@ -457,7 +459,7 @@ export default function AdminPage() {
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr>{['#','Jina','Email','Simu','Role','Status','Tarehe','Hatua'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <thead><tr>{[t('admin.no'),t('admin.name'),t('admin.email'),t('admin.phone'),t('admin.role'),t('admin.status'),t('admin.date'),t('admin.actions')].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
                 <tbody>
                   {users.map(u => (
                     <tr key={u.id} style={{ background: '#fff' }}>
@@ -470,21 +472,21 @@ export default function AdminPage() {
                       <td style={{ ...tdStyle, color: '#9ca3af' }}>{fmtDate(u.created_at)}</td>
                       <td style={actionsTd}>
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap' }}>
-                          <IBtn title="Hariri" color="#2563eb" onClick={() => { setEditUser(u); setEditUserForm({ full_name: u.full_name, email: u.email, phone: u.phone ?? '', role: u.role, status: u.status }); }}>
+                          <IBtn title={t('admin.edit')} color="#2563eb" onClick={() => { setEditUser(u); setEditUserForm({ full_name: u.full_name, email: u.email, phone: u.phone ?? '', role: u.role, status: u.status }); }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 1.42H5v-.71l9.06-9.06.71.71-8.85 9.06zm14.29-12.3a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                           </IBtn>
-                          <IBtn title="Badilisha Nywila" color="#7c3aed" onClick={() => { setResetPwdUser(u); setNewPassword(''); }}>
+                          <IBtn title={t('admin.resetPwd')} color="#7c3aed" onClick={() => { setResetPwdUser(u); setNewPassword(''); }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
                           </IBtn>
                           {u.status === 'active'
-                            ? <IBtn title="Simamisha Akaunti" color="#dc2626" onClick={() => updateUserStatus(u.id, 'suspended')}>
+                            ? <IBtn title={t('admin.suspend')} color="#dc2626" onClick={() => updateUserStatus(u.id, 'suspended')}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15H9V8h2v9zm4 0h-2V8h2v9z"/></svg>
                               </IBtn>
-                            : <IBtn title="Wezesha Akaunti" color="#16a34a" onClick={() => updateUserStatus(u.id, 'active')}>
+                            : <IBtn title={t('admin.activate')} color="#16a34a" onClick={() => updateUserStatus(u.id, 'active')}>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                               </IBtn>
                           }
-                          <IBtn title="Futa Akaunti" color="#dc2626" onClick={() => deleteUser(u.id, u.full_name)}>
+                          <IBtn title={t('admin.delete')} color="#dc2626" onClick={() => deleteUser(u.id, u.full_name)}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                           </IBtn>
                         </div>
@@ -507,7 +509,7 @@ export default function AdminPage() {
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr>{['#','Jina','Pickup','Destination','Status','Rider','Tarehe','Hatua'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <thead><tr>{['#',t('admin.name'),'Pickup','Destination',t('admin.status'),'Rider',t('admin.date'),t('admin.actions')].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
                 <tbody>
                   {trips.map(t => (
                     <tr key={t.id}>
@@ -540,7 +542,7 @@ export default function AdminPage() {
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr>{['Jina','Simu','Bodaboda','Nambari','Leseni','Uthibitisho','Status','Rating','Hatua'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+                <thead><tr>{[t('admin.name'),t('admin.phone'),'Bodaboda',lang==='sw'?'Nambari':'Plate',lang==='sw'?'Leseni':'License',lang==='sw'?'Uthibitisho':'Verification',t('admin.status'),'Rating',t('admin.actions')].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
                 <tbody>
                   {drivers.map(d => (
                     <tr key={d.user_id}>
@@ -554,16 +556,16 @@ export default function AdminPage() {
                       <td style={tdStyle}>{d.rating?.toFixed(1) ?? '—'} ⭐</td>
                       <td style={{ ...tdStyle }}>
                         <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap' }}>
-                          <IBtn title="Hariri" color="#2563eb" onClick={() => { setEditDriver(d); setEditDriverForm({ full_name: d.full_name, email: d.email ?? '', phone: d.phone ?? '', vehicle_model: d.vehicle_model ?? '', plate_number: d.plate_number ?? '', license_number: d.license_number ?? '', verification_status: d.verification_status, status: d.driver_status ?? '' }); }}>
+                          <IBtn title={t('admin.edit')} color="#2563eb" onClick={() => { setEditDriver(d); setEditDriverForm({ full_name: d.full_name, email: d.email ?? '', phone: d.phone ?? '', vehicle_model: d.vehicle_model ?? '', plate_number: d.plate_number ?? '', license_number: d.license_number ?? '', verification_status: d.verification_status, status: d.driver_status ?? '' }); }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 1.42H5v-.71l9.06-9.06.71.71-8.85 9.06zm14.29-12.3a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                           </IBtn>
                           {d.verification_status !== 'VERIFIED' && (
-                            <IBtn title="Thibitisha Dereva" color="#16a34a" onClick={() => verifyDriver(d.profile_id, 'VERIFIED')}>
+                            <IBtn title={t('admin.verify')} color="#16a34a" onClick={() => verifyDriver(d.profile_id, 'VERIFIED')}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
                             </IBtn>
                           )}
                           {d.verification_status !== 'REJECTED' && (
-                            <IBtn title="Kataa Dereva" color="#dc2626" onClick={() => verifyDriver(d.profile_id, 'REJECTED')}>
+                            <IBtn title={t('admin.reject')} color="#dc2626" onClick={() => verifyDriver(d.profile_id, 'REJECTED')}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
                             </IBtn>
                           )}
@@ -582,21 +584,21 @@ export default function AdminPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ display: 'flex', gap: '0.5rem', background: '#fff', padding: '0.5rem', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', width: 'fit-content' }}>
               <button onClick={() => setEvtSubTab('live')} style={{ padding: '0.4rem 1rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: evtSubTab === 'live' ? '#FF6B00' : 'transparent', color: evtSubTab === 'live' ? '#fff' : '#64748b' }}>
-                🔴 Live ({liveEvents.length})
+                🔴 {t('admin.live')} ({liveEvents.length})
               </button>
               <button onClick={() => setEvtSubTab('history')} style={{ padding: '0.4rem 1rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: evtSubTab === 'history' ? '#FF6B00' : 'transparent', color: evtSubTab === 'history' ? '#fff' : '#64748b' }}>
-                📋 Historia ({histEvents.length})
+                📋 {t('admin.history')} ({histEvents.length})
               </button>
             </div>
 
             {evtSubTab === 'live' && (
               <div style={{ background: '#0f172a', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.15)' }}>
                 <div style={{ padding: '0.75rem 1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #1e293b' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#e2e8f0' }}>⚡ Matukio ya MQTT (Real-time)</span>
-                  <button onClick={() => setLiveEvents([])} style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '0.25rem 0.6rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem' }}>Futa Yote</button>
+                  <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#e2e8f0' }}>⚡ {t('admin.liveEvents')}</span>
+                  <button onClick={() => setLiveEvents([])} style={{ background: '#dc2626', color: '#fff', border: 'none', padding: '0.25rem 0.6rem', borderRadius: 5, cursor: 'pointer', fontSize: '0.72rem' }}>{t('admin.clearAll')}</button>
                 </div>
                 {liveEvents.length === 0
-                  ? <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>Hakuna matukio bado — inangoja MQTT…</div>
+                  ? <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>{t('admin.noEvents')}</div>
                   : <div style={{ maxHeight: 500, overflowY: 'auto' }}>
                     {liveEvents.map((ev, i) => {
                       const payload = ev.payload as Record<string,unknown> | undefined;
@@ -652,18 +654,18 @@ export default function AdminPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'nowrap', marginBottom: '0.5rem' }}>
               <div style={{ flex: 1, minWidth: 140, background: 'linear-gradient(135deg,#1e3a5f,#e85d04)', borderRadius: 14, padding: '1rem 1.25rem', color: '#fff' }}>
-                <div style={{ fontSize: '0.72rem', opacity: 0.8 }}>Jumla ya 10% (Mapato ya Admin)</div>
+                <div style={{ fontSize: '0.72rem', opacity: 0.8 }}>{t('admin.totalEarnings')}</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.2rem' }}>TSh {adminEarnings.total.toLocaleString()}</div>
               </div>
               <div style={{ flex: 1, minWidth: 110, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 14, padding: '1rem', textAlign: 'center' }}>
                 <div style={{ fontWeight: 800, color: '#16a34a', fontSize: '1.3rem' }}>{adminEarnings.count}</div>
-                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>Safari Zilizolipwa</div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>{t('admin.tripsCount')}</div>
               </div>
               <div style={{ flex: 1, minWidth: 110, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 14, padding: '1rem', textAlign: 'center' }}>
                 <div style={{ fontWeight: 800, color: '#2563eb', fontSize: '1.1rem' }}>
                   TSh {adminEarnings.count > 0 ? Math.round(adminEarnings.total / adminEarnings.count).toLocaleString() : 0}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>Wastani/Safari</div>
+                <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 2 }}>{t('admin.avgPerTrip')}</div>
               </div>
             </div>
 
@@ -776,13 +778,13 @@ export default function AdminPage() {
                             <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>{c.created_at ? new Date(String(c.created_at)).toLocaleString() : ''}</td>
                             <td style={actionsTd}>
                               <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                                <IBtn title="Ongeza miezi 12" color="#1d4ed8" onClick={() => extendCard(c.id, 12)}>
+                                <IBtn title={t('admin.extend12')} color="#1d4ed8" onClick={() => extendCard(c.id, 12)}>
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zm-7-9h-2v3H8v2h2v3h2v-3h2v-2h-2z"/></svg>
                                 </IBtn>
-                                <IBtn title="Ongeza miezi 24" color="#7c3aed" onClick={() => extendCard(c.id, 24)}>
+                                <IBtn title={t('admin.extend24')} color="#7c3aed" onClick={() => extendCard(c.id, 24)}>
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
                                 </IBtn>
-                                <IBtn title="Futa Kadi" color="#dc2626" onClick={() => burnCard(c.id, String(c.user_name ?? ''))}>
+                                <IBtn title={t('admin.burnCard')} color="#dc2626" onClick={() => burnCard(c.id, String(c.user_name ?? ''))}>
                                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12l1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                                 </IBtn>
                               </div>
@@ -813,13 +815,13 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>{profileName}</div>
-                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Msimamizi wa BodaBoda</div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{t('admin.administrator')}</div>
                 </div>
               </div>
-              <Input label="Jina la Kuonyesha" value={profileName} onChange={setProfileName} placeholder="Admin" />
-              <Input label="Barua Pepe" value={profileEmail} onChange={setProfileEmail} type="email" placeholder="admin@bodaboda.tz" />
+              <Input label={t('admin.displayName')} value={profileName} onChange={setProfileName} placeholder="Admin" />
+              <Input label={t('admin.emailLbl')} value={profileEmail} onChange={setProfileEmail} type="email" placeholder="admin@bodaboda.tz" />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>Picha ya Profaili</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>{t('admin.photoLbl')}</label>
                 <input type="file" accept="image/*" style={{ fontSize: '0.82rem' }}
                   onChange={e => {
                     const file = e.target.files?.[0];
@@ -831,71 +833,59 @@ export default function AdminPage() {
                 />
                 {profileImg && <img src={profileImg} alt="preview" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', marginTop: 6, border: '2px solid #e5e7eb' }} onError={e => (e.currentTarget.style.display = 'none')} />}
               </div>
-              {profileSaved && <div style={{ color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '0.5rem 0.875rem', fontSize: '0.83rem' }}>✅ Imehifadhiwa!</div>}
+              {profileSaved && <div style={{ color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '0.5rem 0.875rem', fontSize: '0.83rem' }}>{t('admin.profileSaved')}</div>}
               <button onClick={saveProfile} style={{ background: 'linear-gradient(135deg,#1e3a5f,#FF6B00)', color: '#fff', border: 'none', borderRadius: 9, padding: '0.7rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
-                Hifadhi Taarifa
+                {t('admin.saveProfileBtn')}
               </button>
             </div>
 
             {/* App Settings card */}
             <div style={{ background: '#fff', borderRadius: 14, padding: '1.5rem', boxShadow: '0 1px 8px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
               <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#374151', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                ⚙️ Mipangilio ya Programu
+                ⚙️ {t('admin.appSettings')}
               </div>
 
               {/* Dark mode toggle */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>
-                    {darkMode ? '🌙 Hali ya Giza (Dark Mode)' : '☀️ Hali ya Mwanga (Light Mode)'}
+                    {darkMode ? `🌙 ${t('admin.darkMode')}` : `☀️ ${t('admin.lightMode')}`}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Badilisha rangi ya programu</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>{t('admin.darkModeDesc')}</div>
                 </div>
-                <button
-                  onClick={() => setDarkMode(p => !p)}
-                  style={{
-                    width: 48, height: 26, borderRadius: 99, border: 'none', cursor: 'pointer',
-                    background: darkMode ? '#FF6B00' : '#d1d5db',
-                    position: 'relative', transition: 'background 0.2s', flexShrink: 0,
-                  }}
-                  aria-label="Toggle dark mode"
-                >
-                  <span style={{
-                    position: 'absolute', top: 3, left: darkMode ? 25 : 3,
-                    width: 20, height: 20, borderRadius: '50%', background: '#fff',
-                    transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                  }} />
+                <button onClick={() => setDarkMode(p => !p)}
+                  style={{ width: 48, height: 26, borderRadius: 99, border: 'none', cursor: 'pointer', background: darkMode ? '#FF6B00' : '#d1d5db', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
+                  aria-label="Toggle dark mode">
+                  <span style={{ position: 'absolute', top: 3, left: darkMode ? 25 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }} />
                 </button>
               </div>
 
-              {/* Notification setting (display-only for now) */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>🔔 Arifa za Malipo</div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Pokea toast ukifika mapato ya platform</div>
+              {/* Language switcher */}
+              <div style={{ padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>🌍 {t('admin.language')}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>{t('admin.languageDesc')}</div>
                 </div>
-                <span style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: 99, padding: '0.2rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>Imewashwa</span>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => setLang('sw')}
+                    style={{ flex: 1, padding: '0.45rem', borderRadius: 8, border: `2px solid ${lang === 'sw' ? '#FF6B00' : '#e5e7eb'}`, background: lang === 'sw' ? '#fff7ed' : '#fff', color: lang === 'sw' ? '#FF6B00' : '#64748b', fontWeight: lang === 'sw' ? 700 : 400, cursor: 'pointer', fontSize: '0.82rem', transition: 'all 0.15s' }}>
+                    🇹🇿 {t('admin.swahili')}
+                  </button>
+                  <button onClick={() => setLang('en')}
+                    style={{ flex: 1, padding: '0.45rem', borderRadius: 8, border: `2px solid ${lang === 'en' ? '#2563eb' : '#e5e7eb'}`, background: lang === 'en' ? '#eff6ff' : '#fff', color: lang === 'en' ? '#2563eb' : '#64748b', fontWeight: lang === 'en' ? 700 : 400, cursor: 'pointer', fontSize: '0.82rem', transition: 'all 0.15s' }}>
+                    🇬🇧 {t('admin.english')}
+                  </button>
+                </div>
               </div>
 
-              {/* Language (display-only) */}
+              {/* Notifications */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>🌍 Lugha ya Mfumo</div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Kiswahili / English</div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>🔔 {t('admin.notifications')}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>{t('admin.notifDesc')}</div>
                 </div>
-                <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 99, padding: '0.2rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>Kiswahili</span>
+                <span style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: 99, padding: '0.2rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>{t('admin.notifOn')}</span>
               </div>
-            </div>
-
-            {/* Danger zone */}
-            <div style={{ background: '#fff', borderRadius: 14, padding: '1.5rem', boxShadow: '0 1px 8px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                ⚠️ Hatua za Mwisho
-              </div>
-              <button onClick={logout} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 9, padding: '0.7rem 1rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem' }}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-                Toka kwenye Akaunti ya Admin
-              </button>
             </div>
 
           </div>
@@ -925,71 +915,71 @@ export default function AdminPage() {
 
       {/* Edit User Modal */}
       {editUser && (
-        <Modal title={`✏️ Hariri — ${editUser.full_name}`} onClose={() => setEditUser(null)}>
-          <Input label="Jina Kamili" value={editUserForm.full_name} onChange={v => setEditUserForm(p => ({ ...p, full_name: v }))} />
-          <Input label="Barua Pepe" value={editUserForm.email} onChange={v => setEditUserForm(p => ({ ...p, email: v }))} type="email" />
-          <Input label="Nambari ya Simu" value={editUserForm.phone} onChange={v => setEditUserForm(p => ({ ...p, phone: v }))} />
-          <Select label="Role" value={editUserForm.role} onChange={v => setEditUserForm(p => ({ ...p, role: v }))} options={[{ value: 'RIDER', label: 'RIDER' }, { value: 'DRIVER', label: 'DRIVER' }]} />
-          <Select label="Status" value={editUserForm.status} onChange={v => setEditUserForm(p => ({ ...p, status: v }))} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
+        <Modal title={`✏️ ${t('admin.edit')} — ${editUser.full_name}`} onClose={() => setEditUser(null)}>
+          <Input label={t('auth.register.fullName')} value={editUserForm.full_name} onChange={v => setEditUserForm(p => ({ ...p, full_name: v }))} />
+          <Input label={t('admin.email')} value={editUserForm.email} onChange={v => setEditUserForm(p => ({ ...p, email: v }))} type="email" />
+          <Input label={t('admin.phone')} value={editUserForm.phone} onChange={v => setEditUserForm(p => ({ ...p, phone: v }))} />
+          <Select label={t('admin.role')} value={editUserForm.role} onChange={v => setEditUserForm(p => ({ ...p, role: v }))} options={[{ value: 'RIDER', label: 'RIDER' }, { value: 'DRIVER', label: 'DRIVER' }]} />
+          <Select label={t('admin.status')} value={editUserForm.status} onChange={v => setEditUserForm(p => ({ ...p, status: v }))} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={saveEditUser} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
-            <button onClick={() => setEditUser(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
+            <button onClick={saveEditUser} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>{t('admin.save')}</button>
+            <button onClick={() => setEditUser(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{t('admin.close')}</button>
           </div>
         </Modal>
       )}
 
       {/* Edit Driver Modal */}
       {editDriver && (
-        <Modal title={`✏️ Hariri Dereva — ${editDriver.full_name}`} onClose={() => setEditDriver(null)}>
-          <Input label="Jina Kamili" value={editDriverForm.full_name} onChange={v => setEditDriverForm(p => ({ ...p, full_name: v }))} />
-          <Input label="Barua Pepe" value={editDriverForm.email} onChange={v => setEditDriverForm(p => ({ ...p, email: v }))} type="email" />
-          <Input label="Nambari ya Simu" value={editDriverForm.phone} onChange={v => setEditDriverForm(p => ({ ...p, phone: v }))} />
-          <Input label="Aina ya Bodaboda" value={editDriverForm.vehicle_model} onChange={v => setEditDriverForm(p => ({ ...p, vehicle_model: v }))} placeholder="Bajaj Boxer 150" />
-          <Input label="Nambari ya Sahani" value={editDriverForm.plate_number} onChange={v => setEditDriverForm(p => ({ ...p, plate_number: v }))} placeholder="T 123 ABC" />
-          <Input label="Nambari ya Leseni" value={editDriverForm.license_number} onChange={v => setEditDriverForm(p => ({ ...p, license_number: v }))} />
-          <Select label="Uthibitisho" value={editDriverForm.verification_status} onChange={v => setEditDriverForm(p => ({ ...p, verification_status: v }))} options={[{ value: 'PENDING', label: 'PENDING' }, { value: 'VERIFIED', label: 'VERIFIED' }, { value: 'REJECTED', label: 'REJECTED' }]} />
+        <Modal title={`✏️ ${t('admin.edit')} ${t('admin.drivers')} — ${editDriver.full_name}`} onClose={() => setEditDriver(null)}>
+          <Input label={t('auth.register.fullName')} value={editDriverForm.full_name} onChange={v => setEditDriverForm(p => ({ ...p, full_name: v }))} />
+          <Input label={t('admin.email')} value={editDriverForm.email} onChange={v => setEditDriverForm(p => ({ ...p, email: v }))} type="email" />
+          <Input label={t('admin.phone')} value={editDriverForm.phone} onChange={v => setEditDriverForm(p => ({ ...p, phone: v }))} />
+          <Input label={t('auth.register.vehicleModel')} value={editDriverForm.vehicle_model} onChange={v => setEditDriverForm(p => ({ ...p, vehicle_model: v }))} placeholder="Bajaj Boxer 150" />
+          <Input label={t('auth.register.plateNumber')} value={editDriverForm.plate_number} onChange={v => setEditDriverForm(p => ({ ...p, plate_number: v }))} placeholder="T 123 ABC" />
+          <Input label={t('auth.register.licenseNumber')} value={editDriverForm.license_number} onChange={v => setEditDriverForm(p => ({ ...p, license_number: v }))} />
+          <Select label={lang === 'sw' ? 'Uthibitisho' : 'Verification'} value={editDriverForm.verification_status} onChange={v => setEditDriverForm(p => ({ ...p, verification_status: v }))} options={[{ value: 'PENDING', label: 'PENDING' }, { value: 'VERIFIED', label: 'VERIFIED' }, { value: 'REJECTED', label: 'REJECTED' }]} />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={saveEditDriver} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
-            <button onClick={() => setEditDriver(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
+            <button onClick={saveEditDriver} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>{t('admin.save')}</button>
+            <button onClick={() => setEditDriver(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{t('admin.close')}</button>
           </div>
         </Modal>
       )}
 
       {/* Edit Trip Modal */}
       {editTrip && (
-        <Modal title={`✏️ Hariri Safari #${editTrip.id}`} onClose={() => setEditTrip(null)}>
-          <Input label="Jina la Safari" value={editTripForm.trip_name} onChange={v => setEditTripForm(p => ({ ...p, trip_name: v }))} />
-          <Select label="Status" value={editTripForm.status} onChange={v => setEditTripForm(p => ({ ...p, status: v }))} options={['SEARCHING_DRIVER','DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS','COMPLETED','CANCELLED'].map(s => ({ value: s, label: s }))} />
-          <Input label="Mahali pa Kuanzia" value={editTripForm.pickup_address} onChange={v => setEditTripForm(p => ({ ...p, pickup_address: v }))} />
-          <Input label="Mahali pa Kwenda" value={editTripForm.destination_address} onChange={v => setEditTripForm(p => ({ ...p, destination_address: v }))} />
+        <Modal title={`✏️ ${t('admin.edit')} ${t('admin.trips')} #${editTrip.id}`} onClose={() => setEditTrip(null)}>
+          <Input label={lang === 'sw' ? 'Jina la Safari' : 'Trip Name'} value={editTripForm.trip_name} onChange={v => setEditTripForm(p => ({ ...p, trip_name: v }))} />
+          <Select label={t('admin.status')} value={editTripForm.status} onChange={v => setEditTripForm(p => ({ ...p, status: v }))} options={['SEARCHING_DRIVER','DRIVER_ASSIGNED','DRIVER_ARRIVED','IN_PROGRESS','COMPLETED','CANCELLED'].map(s => ({ value: s, label: s }))} />
+          <Input label={t('dashboard.pickup')} value={editTripForm.pickup_address} onChange={v => setEditTripForm(p => ({ ...p, pickup_address: v }))} />
+          <Input label={t('dashboard.destination')} value={editTripForm.destination_address} onChange={v => setEditTripForm(p => ({ ...p, destination_address: v }))} />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={saveEditTrip} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
-            <button onClick={() => setEditTrip(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
+            <button onClick={saveEditTrip} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>{t('admin.save')}</button>
+            <button onClick={() => setEditTrip(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{t('admin.close')}</button>
           </div>
         </Modal>
       )}
 
       {/* Create Card Modal */}
       {showCreateCard && (
-        <Modal title="💳 Unda Kadi ya Virtual" onClose={() => setShowCreateCard(false)}>
+        <Modal title={`💳 ${lang === 'sw' ? 'Unda Kadi ya Virtual' : 'Create Virtual Card'}`} onClose={() => setShowCreateCard(false)}>
           <p style={{ fontSize: '0.83rem', color: '#64748b', margin: 0 }}>
-            Ingiza ID ya mtumiaji (unaweza kuona kwenye jedwali la Watumiaji). Kadi mpya itatengenezwa na mtumiaji ataarifiwa.
+            {lang === 'sw' ? 'Ingiza ID ya mtumiaji (unaweza kuona kwenye jedwali la Watumiaji). Kadi mpya itatengenezwa.' : 'Enter the user ID (visible in the Users table). A new card will be created for that user.'}
           </p>
           <Input label="User ID" value={createCardUserId} onChange={setCreateCardUserId} placeholder="e.g. 42" />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={createCardForUser} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Unda</button>
-            <button onClick={() => setShowCreateCard(false)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
+            <button onClick={createCardForUser} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>{lang === 'sw' ? 'Unda' : 'Create'}</button>
+            <button onClick={() => setShowCreateCard(false)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{t('admin.close')}</button>
           </div>
         </Modal>
       )}
 
       {/* Reset Password Modal */}
       {resetPwdUser && (
-        <Modal title={`🔑 Nywila Mpya — ${resetPwdUser.full_name}`} onClose={() => setResetPwdUser(null)}>
-          <Input label="Nywila Mpya (min 6)" value={newPassword} onChange={setNewPassword} type="password" placeholder="••••••••" />
+        <Modal title={`🔑 ${t('admin.resetPwd')} — ${resetPwdUser.full_name}`} onClose={() => setResetPwdUser(null)}>
+          <Input label={`${lang === 'sw' ? 'Nywila Mpya' : 'New Password'} (min 6)`} value={newPassword} onChange={setNewPassword} type="password" placeholder="••••••••" />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={doResetPassword} style={{ flex: 1, padding: '0.65rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Badilisha</button>
-            <button onClick={() => setResetPwdUser(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
+            <button onClick={doResetPassword} style={{ flex: 1, padding: '0.65rem', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>{lang === 'sw' ? 'Badilisha' : 'Change'}</button>
+            <button onClick={() => setResetPwdUser(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{t('admin.close')}</button>
           </div>
         </Modal>
       )}
