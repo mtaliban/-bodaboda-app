@@ -117,7 +117,8 @@ export default function AdminPage() {
   const [users,   setUsers]    = useState<AdminUser[]>([]);
   const [trips,   setTrips]    = useState<AdminTrip[]>([]);
   const [drivers, setDrivers]  = useState<AdminDriver[]>([]);
-  const [tab, setTab] = useState<'stats'|'users'|'trips'|'drivers'|'events'|'wallet'|'profile'>('stats');
+  const [tab, setTab] = useState<'stats'|'users'|'trips'|'drivers'|'events'|'wallet'|'settings'>('stats');
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('boda_theme') === 'dark');
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
   const [histEvents, setHistEvents] = useState<HistEvent[]>([]);
   const [evtSubTab, setEvtSubTab]   = useState<'live'|'history'>('live');
@@ -315,6 +316,16 @@ export default function AdminPage() {
     } catch { toast('Hitilafu ya kubadilisha nywila.'); }
   };
 
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('boda_theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.removeItem('boda_theme');
+    }
+  }, [darkMode]);
+
   const saveProfile = () => {
     localStorage.setItem('admin_display_name', profileName);
     localStorage.setItem('admin_email', profileEmail);
@@ -324,7 +335,7 @@ export default function AdminPage() {
 
   const thStyle: React.CSSProperties = { padding: '0.6rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', fontSize: '0.78rem', background: '#f8fafc', whiteSpace: 'nowrap' };
   const tdStyle: React.CSSProperties = { padding: '0.55rem 0.875rem', fontSize: '0.8rem', borderBottom: '1px solid #f3f4f6', verticalAlign: 'middle' };
-  const actionsTd: React.CSSProperties = { ...tdStyle, minWidth: 120 };
+  const actionsTd: React.CSSProperties = { ...tdStyle, minWidth: 160 };
 
   function IBtn({ onClick, title, color, children }: { onClick: () => void; title: string; color: string; children: React.ReactNode }) {
     return (
@@ -339,7 +350,7 @@ export default function AdminPage() {
     const pages = Math.max(1, Math.ceil(total / limit));
     if (pages <= 1) return null;
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.75rem 1rem', borderTop: '1px solid #f3f4f6', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.75rem 1rem', borderTop: '1px solid #f3f4f6', justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
         <button onClick={() => onPage(page - 1)} disabled={page <= 1}
           style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: page <= 1 ? '#f9fafb' : '#fff', cursor: page <= 1 ? 'default' : 'pointer', fontSize: '0.8rem', color: '#374151' }}>‹</button>
         {Array.from({ length: pages }, (_, i) => i + 1).filter(p => p === 1 || p === pages || Math.abs(p - page) <= 1).reduce<(number|string)[]>((acc, p, i, arr) => {
@@ -363,13 +374,13 @@ export default function AdminPage() {
   if (!token) return <Navigate to="/login" replace />;
 
   const navItems = [
-    { id: 'stats'   as const, icon: '📊', label: 'Stats'     },
-    { id: 'users'   as const, icon: '👥', label: 'Watumiaji' },
-    { id: 'trips'   as const, icon: '🏍️', label: 'Safari'    },
-    { id: 'drivers' as const, icon: '⚙️', label: 'Madereva'  },
-    { id: 'wallet'  as const, icon: '💰', label: 'Wallet'    },
-    { id: 'events'  as const, icon: '⚡', label: 'Matukio'   },
-    { id: 'profile' as const, icon: '👤', label: 'Profaili'  },
+    { id: 'stats'    as const, icon: '📊', label: 'Stats'      },
+    { id: 'users'    as const, icon: '👥', label: 'Watumiaji'  },
+    { id: 'trips'    as const, icon: '🏍️', label: 'Safari'     },
+    { id: 'drivers'  as const, icon: '🪪', label: 'Madereva'   },
+    { id: 'wallet'   as const, icon: '💰', label: 'Wallet'     },
+    { id: 'events'   as const, icon: '⚡', label: 'Matukio'    },
+    { id: 'settings' as const, icon: '⚙️', label: 'Mipangilio' },
   ];
 
   return (
@@ -458,7 +469,7 @@ export default function AdminPage() {
                       <td style={tdStyle}><Badge text={u.status} color="#10b981" /></td>
                       <td style={{ ...tdStyle, color: '#9ca3af' }}>{fmtDate(u.created_at)}</td>
                       <td style={actionsTd}>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap' }}>
                           <IBtn title="Hariri" color="#2563eb" onClick={() => { setEditUser(u); setEditUserForm({ full_name: u.full_name, email: u.email, phone: u.phone ?? '', role: u.role, status: u.status }); }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 1.42H5v-.71l9.06-9.06.71.71-8.85 9.06zm14.29-12.3a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                           </IBtn>
@@ -542,7 +553,7 @@ export default function AdminPage() {
                       <td style={tdStyle}>{d.driver_status ?? '—'}</td>
                       <td style={tdStyle}>{d.rating?.toFixed(1) ?? '—'} ⭐</td>
                       <td style={{ ...tdStyle }}>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap' }}>
                           <IBtn title="Hariri" color="#2563eb" onClick={() => { setEditDriver(d); setEditDriverForm({ full_name: d.full_name, email: d.email ?? '', phone: d.phone ?? '', vehicle_model: d.vehicle_model ?? '', plate_number: d.plate_number ?? '', license_number: d.license_number ?? '', verification_status: d.verification_status, status: d.driver_status ?? '' }); }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92 1.42H5v-.71l9.06-9.06.71.71-8.85 9.06zm14.29-12.3a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                           </IBtn>
@@ -639,7 +650,7 @@ export default function AdminPage() {
         {/* ── Wallet Tab ── */}
         {!loading && tab === 'wallet' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'nowrap', marginBottom: '0.5rem' }}>
               <div style={{ flex: 1, minWidth: 140, background: 'linear-gradient(135deg,#1e3a5f,#e85d04)', borderRadius: 14, padding: '1rem 1.25rem', color: '#fff' }}>
                 <div style={{ fontSize: '0.72rem', opacity: 0.8 }}>Jumla ya 10% (Mapato ya Admin)</div>
                 <div style={{ fontSize: '1.6rem', fontWeight: 800, marginTop: '0.2rem' }}>TSh {adminEarnings.total.toLocaleString()}</div>
@@ -731,7 +742,7 @@ export default function AdminPage() {
 
             {walletSubTab === 'cards' && (
               <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', borderBottom: '1px solid #f3f4f6', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', borderBottom: '1px solid #f3f4f6', flexWrap: 'nowrap', gap: '0.5rem' }}>
                   <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>💳 Kadi za Virtual za Watumiaji</div>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <button onClick={() => { setShowCreateCard(true); setCreateCardUserId(''); }}
@@ -787,10 +798,15 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ── Admin Profile ── */}
-        {tab === 'profile' && (
-          <div style={{ maxWidth: 440, margin: '0 auto' }}>
+        {/* ── Settings Tab ── */}
+        {tab === 'settings' && (
+          <div style={{ maxWidth: 480, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+            {/* Profile card */}
             <div style={{ background: '#fff', borderRadius: 14, padding: '1.5rem', boxShadow: '0 1px 8px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#374151', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                👤 Taarifa za Profaili
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #f3f4f6' }}>
                 <div style={{ width: 64, height: 64, borderRadius: '50%', background: profileImg ? 'transparent' : '#FF6B00', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, border: '2px solid #e5e7eb' }}>
                   {profileImg ? <img src={profileImg} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ color: '#fff', fontWeight: 800, fontSize: '1.5rem' }}>{profileName.charAt(0)}</span>}
@@ -800,12 +816,10 @@ export default function AdminPage() {
                   <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Msimamizi wa BodaBoda</div>
                 </div>
               </div>
-
               <Input label="Jina la Kuonyesha" value={profileName} onChange={setProfileName} placeholder="Admin" />
               <Input label="Barua Pepe" value={profileEmail} onChange={setProfileEmail} type="email" placeholder="admin@bodaboda.tz" />
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>Picha (faili)</label>
+                <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>Picha ya Profaili</label>
                 <input type="file" accept="image/*" style={{ fontSize: '0.82rem' }}
                   onChange={e => {
                     const file = e.target.files?.[0];
@@ -817,13 +831,73 @@ export default function AdminPage() {
                 />
                 {profileImg && <img src={profileImg} alt="preview" style={{ width: 60, height: 60, borderRadius: '50%', objectFit: 'cover', marginTop: 6, border: '2px solid #e5e7eb' }} onError={e => (e.currentTarget.style.display = 'none')} />}
               </div>
-
               {profileSaved && <div style={{ color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '0.5rem 0.875rem', fontSize: '0.83rem' }}>✅ Imehifadhiwa!</div>}
-
               <button onClick={saveProfile} style={{ background: 'linear-gradient(135deg,#1e3a5f,#FF6B00)', color: '#fff', border: 'none', borderRadius: 9, padding: '0.7rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Hifadhi Taarifa
               </button>
             </div>
+
+            {/* App Settings card */}
+            <div style={{ background: '#fff', borderRadius: 14, padding: '1.5rem', boxShadow: '0 1px 8px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#374151', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                ⚙️ Mipangilio ya Programu
+              </div>
+
+              {/* Dark mode toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>
+                    {darkMode ? '🌙 Hali ya Giza (Dark Mode)' : '☀️ Hali ya Mwanga (Light Mode)'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Badilisha rangi ya programu</div>
+                </div>
+                <button
+                  onClick={() => setDarkMode(p => !p)}
+                  style={{
+                    width: 48, height: 26, borderRadius: 99, border: 'none', cursor: 'pointer',
+                    background: darkMode ? '#FF6B00' : '#d1d5db',
+                    position: 'relative', transition: 'background 0.2s', flexShrink: 0,
+                  }}
+                  aria-label="Toggle dark mode"
+                >
+                  <span style={{
+                    position: 'absolute', top: 3, left: darkMode ? 25 : 3,
+                    width: 20, height: 20, borderRadius: '50%', background: '#fff',
+                    transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                  }} />
+                </button>
+              </div>
+
+              {/* Notification setting (display-only for now) */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>🔔 Arifa za Malipo</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Pokea toast ukifika mapato ya platform</div>
+                </div>
+                <span style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: 99, padding: '0.2rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>Imewashwa</span>
+              </div>
+
+              {/* Language (display-only) */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: 10, border: '1px solid #e5e7eb' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>🌍 Lugha ya Mfumo</div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>Kiswahili / English</div>
+                </div>
+                <span style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: 99, padding: '0.2rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>Kiswahili</span>
+              </div>
+            </div>
+
+            {/* Danger zone */}
+            <div style={{ background: '#fff', borderRadius: 14, padding: '1.5rem', boxShadow: '0 1px 8px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#dc2626', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                ⚠️ Hatua za Mwisho
+              </div>
+              <button onClick={logout} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fef2f2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: 9, padding: '0.7rem 1rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.88rem' }}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                Toka kwenye Akaunti ya Admin
+              </button>
+            </div>
+
           </div>
         )}
           </div>
