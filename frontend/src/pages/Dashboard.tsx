@@ -4,6 +4,7 @@ import { flushSync, createPortal } from 'react-dom';
 import { AxiosError } from 'axios';
 import L from 'leaflet';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../context/LanguageContext';
 import api, { driverApi } from '../api/axios';
 import { useMqtt, type MqttEvent } from '../hooks/useMqtt';
 import Alert from '../components/Alert';
@@ -111,10 +112,11 @@ function EmptyState({ icon, title, desc }: { icon: string; title: string; desc: 
 }
 
 function TabLoader() {
+  const { t } = useLang();
   return (
     <div className="tab-loading">
       <div className="spinner" />
-      <p>Loading…</p>
+      <p>{t('common.loading')}</p>
     </div>
   );
 }
@@ -1727,6 +1729,7 @@ function EditProfileTab({ user, updateUser, setActiveTab }: { user: User; update
 // ── Settings Tab ─────────────────────────────────────────────────────
 
 function SettingsTab({ user, updateUser }: { user: User; updateUser: (u: User) => void }) {
+  const { t, lang, setLang } = useLang();
   const isDriver = user.role === 'DRIVER';
   const [section, setSection] = useState<'account' | 'vehicle' | null>(null);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('boda_theme') === 'dark');
@@ -1825,21 +1828,21 @@ function SettingsTab({ user, updateUser }: { user: User; updateUser: (u: User) =
             {accErr && <Alert type="error"   message={accErr} />}
             <form onSubmit={saveAccount} className="edit-form">
               <div className="form-group">
-                <label>Jina Kamili</label>
+                <label>{t('settings.displayName')}</label>
                 <input name="full_name" type="text" value={accForm.full_name} onChange={handleAccChange} placeholder="Jina lako kamili" />
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Nambari ya Simu</label>
+                  <label>{t('settings.phone')}</label>
                   <input name="phone" type="tel" value={accForm.phone} onChange={handleAccChange} placeholder="+255700000000" />
                 </div>
                 <div className="form-group">
-                  <label>Barua Pepe</label>
+                  <label>{t('settings.email')}</label>
                   <input name="email" type="email" value={accForm.email} onChange={handleAccChange} placeholder="wewe@mfano.com" />
                 </div>
               </div>
               <div className="form-group">
-                <label>Picha ya Wasifu</label>
+                <label>{t('settings.profilePhoto')}</label>
                 <input type="file" accept="image/*" style={{ fontSize:'0.82rem' }}
                   onChange={e => {
                     const file = e.target.files?.[0];
@@ -1856,9 +1859,9 @@ function SettingsTab({ user, updateUser }: { user: User; updateUser: (u: User) =
                 )}
               </div>
               <div className="edit-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => setSection(null)}>Ghairi</button>
+                <button type="button" className="btn btn-ghost" onClick={() => setSection(null)}>{t('dashboard.cancel')}</button>
                 <button type="submit" className="btn btn-primary" disabled={accSaving}>
-                  {accSaving ? <><span className="btn-spinner" /> Inahifadhi…</> : 'Hifadhi'}
+                  {accSaving ? <><span className="btn-spinner" /> Inahifadhi…</> : t('settings.saveProfile')}
                 </button>
               </div>
             </form>
@@ -1899,9 +1902,9 @@ function SettingsTab({ user, updateUser }: { user: User; updateUser: (u: User) =
                     </div>
                   </div>
                   <div className="edit-actions">
-                    <button type="button" className="btn btn-ghost" onClick={() => setSection(null)}>Ghairi</button>
+                    <button type="button" className="btn btn-ghost" onClick={() => setSection(null)}>{t('dashboard.cancel')}</button>
                     <button type="submit" className="btn btn-navy" disabled={vehSaving}>
-                      {vehSaving ? <><span className="btn-spinner" /> Inahifadhi…</> : 'Hifadhi'}
+                      {vehSaving ? <><span className="btn-spinner" /> Inahifadhi…</> : t('settings.saveProfile')}
                     </button>
                   </div>
                 </form>
@@ -1926,16 +1929,40 @@ function SettingsTab({ user, updateUser }: { user: User; updateUser: (u: User) =
       <div className="settings-section">
         <div className="settings-section-header" style={{ cursor: 'default' }}>
           <div>
-            <div className="settings-section-title">🎨 Muonekano</div>
-            <div className="settings-section-sub">Mada ya programu (Dark / Light)</div>
+            <div className="settings-section-title">🎨 {t('settings.appSettings')}</div>
+            <div className="settings-section-sub">{t('settings.darkModeDesc')}</div>
           </div>
           <label className="settings-toggle">
             <input type="checkbox" checked={darkMode} onChange={e => setDarkMode(e.target.checked)} />
             <span className="settings-toggle-track">
               <span className="settings-toggle-thumb" />
             </span>
-            <span className="settings-toggle-label">{darkMode ? '🌙 Dark' : '☀️ Light'}</span>
+            <span className="settings-toggle-label">{darkMode ? `🌙 ${t('settings.darkMode')}` : `☀️ ${t('settings.lightMode')}`}</span>
           </label>
+        </div>
+      </div>
+
+      {/* ── Language ── */}
+      <div className="settings-section">
+        <div className="settings-section-header" style={{ cursor: 'default' }}>
+          <div>
+            <div className="settings-section-title">🌐 {t('settings.language')}</div>
+            <div className="settings-section-sub">{t('settings.languageDesc')}</div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => setLang('sw')}
+              className={`btn btn-sm${lang === 'sw' ? ' btn-primary' : ' btn-ghost'}`}
+            >
+              {t('settings.swahili')}
+            </button>
+            <button
+              onClick={() => setLang('en')}
+              className={`btn btn-sm${lang === 'en' ? ' btn-primary' : ' btn-ghost'}`}
+            >
+              {t('settings.english')}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2496,7 +2523,8 @@ function FareEstimate({ pickup, destination, onReady, walletBalance }: {
 
 // ── Request Ride Tab (RIDER only) ─────────────────────────────────────
 
-function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
+function RequestRideTab({ setActiveTab }: { setActiveTab: (tab: Tab) => void }) {
+  const { t } = useLang();
   const [pickup, setPickup]               = useState<MapLocation | null>(null);
   const [destination, setDestination]     = useState<MapLocation | null>(null);
   const [isLoading, setIsLoading]         = useState(false);
@@ -2592,10 +2620,10 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
               style={{ marginTop: '1rem', opacity: balanceInsufficient ? 0.5 : 1 }}
             >
               {isLoading
-                ? <><span className="btn-spinner" /> Inatafuta dereva…</>
+                ? <><span className="btn-spinner" /> {t('dashboard.requesting')}</>
                 : balanceInsufficient
                   ? '🔒 Salio Haitoshi — Ongeza Pesa'
-                  : '🏍️  Omba Safari'}
+                  : `🏍️  ${t('dashboard.requestBtn')}`}
             </button>
 
             {balanceInsufficient && (
@@ -2617,8 +2645,9 @@ function RequestRideTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
 
 // ── My Trips Tab (RIDER only) ─────────────────────────────────────────
 
-function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
+function MyTripsTab({ setActiveTab }: { setActiveTab: (tab: Tab) => void }) {
   const { user } = useAuth();
+  const { t } = useLang();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2664,14 +2693,14 @@ function MyTripsTab({ setActiveTab }: { setActiveTab: (t: Tab) => void }) {
     <div className="tab-page">
 
       <div className="tab-page-head">
-        <h1 className="tab-page-title">My Trips</h1>
-        <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('request-ride')}>+ Request Ride</button>
+        <h1 className="tab-page-title">{t('dashboard.myTrips')}</h1>
+        <button className="btn btn-primary btn-sm" onClick={() => setActiveTab('request-ride')}>+ {t('dashboard.requestRide')}</button>
       </div>
 
       {isLoading && <TabLoader />}
       {!isLoading && error && <Alert type="error" message={error} />}
       {!isLoading && !error && trips.length === 0 && (
-        <EmptyState icon="🏍️" title="No trips yet" desc="Request your first BodaBoda ride to get started." />
+        <EmptyState icon="🏍️" title={t('dashboard.noTrips')} desc="Request your first BodaBoda ride to get started." />
       )}
 
       {!isLoading && sorted.length > 0 && (
@@ -2965,6 +2994,7 @@ function VirtualCardDisplay({ card, userName, onGet, getting }: {
 
 function WalletTab() {
   const { user } = useAuth();
+  const { t } = useLang();
   const [data, setData]         = useState<WalletData | null>(null);
   const [card, setCard]         = useState<CardData | 'loading'>('loading');
   const [loading, setLoading]   = useState(true);
@@ -3044,7 +3074,7 @@ function WalletTab() {
       {/* 1. Balance header — always shown */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(90deg,#FF6B00,#ff9100)', borderRadius: 12, padding: '0.85rem 1.25rem', color: '#fff', marginBottom: '1rem' }}>
         <div>
-          <div style={{ fontSize: '0.72rem', opacity: 0.85 }}>Salio la Mkoba</div>
+          <div style={{ fontSize: '0.72rem', opacity: 0.85 }}>{t('dashboard.balance')}</div>
           <div style={{ fontSize: '1.6rem', fontWeight: 800 }}>
             {loading ? '…' : `TSh ${balance.toLocaleString()}`}
           </div>
@@ -3254,27 +3284,27 @@ function DriverWalletTab() {
 
 // ── Nav items (role-aware) ────────────────────────────────────────────
 
-function getNavItems(role: string, _unreadCount: number): NavItem[] {
+function getNavItems(role: string, _unreadCount: number, t: (key: string) => string): NavItem[] {
   if (role === 'RIDER') {
     return [
-      { tab: 'home',         label: 'Home',         icon: <IconHome />     },
-      { tab: 'request-ride', label: 'Ride',         icon: <IconMoto />     },
-      { tab: 'my-trips',     label: 'My Trips',     icon: <IconList />     },
-      { tab: 'wallet',       label: 'Wallet',       icon: <span style={{fontSize:'1.1rem'}}>💰</span> },
-      { tab: 'settings',     label: 'Settings',     icon: <IconSettings /> },
+      { tab: 'home',         label: t('dashboard.driverHome'),  icon: <IconHome />     },
+      { tab: 'request-ride', label: t('dashboard.requestRide'), icon: <IconMoto />     },
+      { tab: 'my-trips',     label: t('dashboard.myTrips'),     icon: <IconList />     },
+      { tab: 'wallet',       label: t('dashboard.wallet'),      icon: <span style={{fontSize:'1.1rem'}}>💰</span> },
+      { tab: 'settings',     label: t('dashboard.settings'),    icon: <IconSettings /> },
     ];
   }
   if (role === 'DRIVER') {
     return [
-      { tab: 'home',          label: 'Home',     icon: <IconHome />     },
-      { tab: 'offer-history', label: 'Safari',   icon: <IconList />     },
-      { tab: 'wallet',        label: 'Mkoba',    icon: <span style={{fontSize:'1.1rem'}}>💰</span> },
-      { tab: 'settings',      label: 'Mipangilio', icon: <IconSettings /> },
+      { tab: 'home',          label: t('dashboard.driverHome'),  icon: <IconHome />     },
+      { tab: 'offer-history', label: t('dashboard.driverTrips'), icon: <IconList />     },
+      { tab: 'wallet',        label: t('dashboard.wallet'),      icon: <span style={{fontSize:'1.1rem'}}>💰</span> },
+      { tab: 'settings',      label: t('dashboard.settings'),    icon: <IconSettings /> },
     ];
   }
   return [
-    { tab: 'home',     label: 'Home',     icon: <IconHome />     },
-    { tab: 'settings', label: 'Settings', icon: <IconSettings /> },
+    { tab: 'home',     label: t('dashboard.driverHome'), icon: <IconHome />     },
+    { tab: 'settings', label: t('dashboard.settings'),  icon: <IconSettings /> },
   ];
 }
 
@@ -3287,7 +3317,8 @@ function Sidebar({ user, activeTab, setActiveTab, onLogout, unreadCount }: {
   onLogout: () => void;
   unreadCount: number;
 }) {
-  const navItems = getNavItems(user.role, unreadCount);
+  const { t } = useLang();
+  const navItems = getNavItems(user.role, unreadCount, t);
   return (
     <aside className="spa-sidebar">
       <div className="spa-sidebar-user">
@@ -3317,7 +3348,7 @@ function Sidebar({ user, activeTab, setActiveTab, onLogout, unreadCount }: {
         <div className="spa-nav-divider" />
         <button className="spa-nav-item spa-logout" onClick={onLogout}>
           <span className="spa-nav-icon"><IconLogout /></span>
-          Logout
+          {t('common.logout')}
         </button>
       </nav>
     </aside>
@@ -3333,7 +3364,8 @@ function BottomNav({ user, activeTab, setActiveTab, onLogout, unreadCount }: {
   onLogout: () => void;
   unreadCount: number;
 }) {
-  const navItems = getNavItems(user.role, unreadCount).slice(0, 4);
+  const { t } = useLang();
+  const navItems = getNavItems(user.role, unreadCount, t).slice(0, 4);
   return (
     <nav className="spa-bottom-nav">
       <div className="spa-bottom-nav-inner">
@@ -3352,7 +3384,7 @@ function BottomNav({ user, activeTab, setActiveTab, onLogout, unreadCount }: {
         ))}
         <button className="spa-bottom-item spa-logout" onClick={onLogout}>
           <span className="spa-bottom-item-icon"><IconLogout /></span>
-          <span>Logout</span>
+          <span>{t('common.logout')}</span>
         </button>
       </div>
     </nav>
@@ -3560,6 +3592,7 @@ function DriverOfferWatcher({ activeTab: _activeTab, setActiveTab }: {
 // ── Dashboard (root) ──────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const { t } = useLang();
   const { user: ctxUser, setUser, logout } = useAuth();
   const [user,        setLocalUser]   = useState<User | null>(ctxUser);
   const [activeTab,   setActiveTab]   = useState<Tab>('home');
@@ -3594,7 +3627,7 @@ export default function Dashboard() {
     return (
       <div className="loading-screen">
         <div className="spinner" />
-        <p>Loading dashboard…</p>
+        <p>{t('common.loading')}</p>
       </div>
     );
   }
