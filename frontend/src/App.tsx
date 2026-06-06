@@ -20,11 +20,22 @@ function PageTracker() {
   return null;
 }
 
+function isAdminTokenValid(): boolean {
+  const t = localStorage.getItem('admin_token');
+  if (!t) return false;
+  try {
+    const { exp } = JSON.parse(atob(t.split('.')[1]));
+    return exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
+
 // Redirect to dashboard if already logged in, otherwise show the public page.
-// Check isAuthenticated FIRST — it's set synchronously from localStorage on first
-// render, so a logged-in user redirects instantly with no flash of the public page.
+// Admins with a valid admin_token are sent to /admin; regular users to /dashboard.
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
+  if (isAdminTokenValid()) return <Navigate to="/admin" replace />;
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
   if (isLoading) return null;
   return <>{children}</>;

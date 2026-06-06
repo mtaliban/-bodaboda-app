@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { Navigate } from 'react-router-dom';
 import axios from 'axios';
 
 const ADMIN_API = `${window.location.protocol}//${window.location.host}/admin-api`;
@@ -10,7 +11,6 @@ interface AdminDriver { user_id: number; full_name: string; email: string; phone
 interface LiveEvent { topic: string; event_type?: string; timestamp: string; [key: string]: unknown; }
 interface HistEvent { id: number; trip_id: number; event_type: string; changed_by: string; timestamp: string; trip_name: string; pickup_address: string; destination_address: string; rider_name: string; }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtDate(s: string) { return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
 function fmtTime(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
@@ -56,7 +56,6 @@ function StatCard({ label, value, color }: { label: string; value: number; color
     </div>
   );
 }
-
 
 function Badge({ text, color }: { text: string; color: string }) {
   const map: Record<string, { bg: string; fg: string }> = {
@@ -114,8 +113,6 @@ export default function AdminPage() {
     try { const p = JSON.parse(atob(t.split('.')[1])); if (p.exp * 1000 < Date.now()) { localStorage.removeItem('admin_token'); return ''; } } catch { localStorage.removeItem('admin_token'); return ''; }
     return t;
   });
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [loginErr, setLoginErr]   = useState('');
   const [stats,   setStats]    = useState<Stats | null>(null);
   const [users,   setUsers]    = useState<AdminUser[]>([]);
   const [trips,   setTrips]    = useState<AdminTrip[]>([]);
@@ -133,7 +130,6 @@ export default function AdminPage() {
   const [actionMsg, setActionMsg] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
 
-  // Edit modals
   const [editUser,   setEditUser]   = useState<AdminUser | null>(null);
   const [editUserForm, setEditUserForm] = useState({ full_name: '', email: '', phone: '', role: '', status: '' });
   const [editDriver, setEditDriver] = useState<AdminDriver | null>(null);
@@ -145,7 +141,6 @@ export default function AdminPage() {
   const [showCreateCard, setShowCreateCard] = useState(false);
   const [createCardUserId, setCreateCardUserId] = useState('');
 
-  // Admin profile (local)
   const [profileName, setProfileName]   = useState(() => localStorage.getItem('admin_display_name') || 'Admin');
   const [profileEmail, setProfileEmail] = useState(() => localStorage.getItem('admin_email') || '');
   const [profileImg, setProfileImg]     = useState(() => localStorage.getItem('admin_img') || '');
@@ -181,16 +176,7 @@ export default function AdminPage() {
     return () => { ws.close(); wsRef.current = null; };
   }, [token]);
 
-  const login = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoginErr('');
-    try {
-      const { data } = await axios.post(`${ADMIN_API}/admin/login`, loginForm);
-      localStorage.setItem('admin_token', data.access_token);
-      setToken(data.access_token);
-    } catch { setLoginErr('Jina la mtumiaji au nywila si sahihi.'); }
-  };
-
-  const logout = () => { localStorage.removeItem('admin_token'); window.location.href = '/'; };
+  const logout = () => { localStorage.removeItem('admin_token'); window.location.href = '/login'; };
 
   const verifyDriver = async (profileId: number, status: 'VERIFIED' | 'REJECTED') => {
     await axios.patch(`${ADMIN_API}/admin/drivers/${profileId}/verify`, { status }, { headers });
@@ -293,81 +279,44 @@ export default function AdminPage() {
   const thStyle: React.CSSProperties = { padding: '0.6rem 0.875rem', textAlign: 'left', fontWeight: 700, color: '#374151', borderBottom: '2px solid #e5e7eb', fontSize: '0.78rem', background: '#f8fafc', whiteSpace: 'nowrap' };
   const tdStyle: React.CSSProperties = { padding: '0.55rem 0.875rem', fontSize: '0.8rem', borderBottom: '1px solid #f3f4f6', verticalAlign: 'middle' };
 
-  // ── Login screen ─────────────────────────────────────────────────────────────
-  if (!token) {
-    return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)' }}>
-        <div style={{ background: '#fff', borderRadius: 18, padding: '2.5rem 2rem', width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-          <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🛡️</div>
-            <h1 style={{ fontWeight: 800, fontSize: '1.5rem', color: '#0f172a', margin: 0 }}>BodaBoda Admin</h1>
-            <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '0.25rem' }}>Ingia kwa akaunti ya msimamizi</p>
-          </div>
-          {loginErr && <div style={{ color: '#dc2626', fontSize: '0.83rem', marginBottom: '1rem', padding: '0.6rem 0.875rem', background: '#fef2f2', borderRadius: 8, border: '1px solid #fca5a5' }}>{loginErr}</div>}
-          <form onSubmit={login} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-            <div>
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Jina la Mtumiaji</label>
-              <input placeholder="admin" value={loginForm.username} onChange={e => setLoginForm(p => ({ ...p, username: e.target.value }))}
-                style={{ width: '100%', padding: '0.7rem 0.875rem', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: '0.9rem', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-            <div>
-              <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Nywila</label>
-              <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))}
-                style={{ width: '100%', padding: '0.7rem 0.875rem', border: '1.5px solid #e2e8f0', borderRadius: 9, fontSize: '0.9rem', boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-            <button type="submit" style={{ background: 'linear-gradient(135deg,#FF6B00,#ff9100)', color: '#fff', border: 'none', borderRadius: 9, padding: '0.8rem', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', marginTop: '0.25rem' }}>
-              Ingia
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+  // Redirect to shared login page if not authenticated
+  if (!token) return <Navigate to="/login" replace />;
 
-  // ── Dashboard ─────────────────────────────────────────────────────────────────
-  const tabs: { id: typeof tab; label: string }[] = [
-    { id: 'stats',   label: '📊 Stats'     },
-    { id: 'users',   label: `👥 Watumiaji (${users.length})` },
-    { id: 'trips',   label: `🏍️ Safari (${trips.length})`   },
-    { id: 'drivers', label: `🏍️ Madereva (${drivers.length})` },
-    { id: 'events',  label: `⚡ Matukio`   },
-    { id: 'wallet',  label: `💰 Wallet (${walletTxns.length})` },
-    { id: 'profile', label: '👤 Profaili'  },
+  const navItems = [
+    { id: 'stats'   as const, icon: '📊', label: 'Stats'     },
+    { id: 'users'   as const, icon: '👥', label: 'Watumiaji' },
+    { id: 'trips'   as const, icon: '🏍️', label: 'Safari'    },
+    { id: 'drivers' as const, icon: '⚙️', label: 'Madereva'  },
+    { id: 'wallet'  as const, icon: '💰', label: 'Wallet'    },
+    { id: 'events'  as const, icon: '⚡', label: 'Matukio'   },
+    { id: 'profile' as const, icon: '👤', label: 'Profaili'  },
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', fontFamily: 'system-ui,sans-serif' }}>
-      {/* Header */}
-      <div style={{ background: '#0f172a', color: '#fff', padding: '0 1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 58, position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+    <div style={{ minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui,sans-serif', paddingBottom: 68 }}>
+
+      {/* Top header — same gradient style as rider/driver */}
+      <div style={{ background: 'linear-gradient(135deg,#1e3a5f 0%,#FF6B00 100%)', color: '#fff', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           {profileImg
-            ? <img src={profileImg} alt="" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-            : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#FF6B00', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '0.9rem' }}>{profileName.charAt(0)}</div>
+            ? <img src={profileImg} alt="" style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.4)' }} />
+            : <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1rem', border: '2px solid rgba(255,255,255,0.3)' }}>{profileName.charAt(0)}</div>
           }
           <div>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>🛡️ BodaBoda Admin</div>
-            <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>{profileName}</div>
+            <div style={{ fontWeight: 800, fontSize: '0.92rem', lineHeight: 1.2 }}>🛡️ BodaBoda Admin</div>
+            <div style={{ fontSize: '0.68rem', opacity: 0.82, lineHeight: 1.3 }}>{profileName}</div>
           </div>
         </div>
-        <button onClick={logout} title="Logout" style={{ background: 'transparent', color: '#94a3b8', border: '1px solid #334155', borderRadius: 7, padding: '0.35rem 0.6rem', cursor: 'pointer', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-          <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Logout</span>
+        <button onClick={logout} style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '0.38rem 0.8rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+          Toka
         </button>
       </div>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '1.25rem 1rem' }}>
+      {/* Scrollable content — same max-width + padding as Dashboard panels */}
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '1rem 0.75rem' }}>
         {apiError && <div style={{ color: '#dc2626', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{apiError}</div>}
-        {loading && <div style={{ textAlign: 'center', color: '#64748b', padding: '3rem', fontSize: '0.9rem' }}>Inapakia…</div>}
-
-        {/* Tab nav */}
-        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '1.25rem', background: '#fff', padding: '0.5rem', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ padding: '0.45rem 0.875rem', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: tab === t.id ? '#0f172a' : 'transparent', color: tab === t.id ? '#fff' : '#64748b', transition: 'all 0.15s' }}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {loading && <div style={{ textAlign: 'center', padding: '3rem' }}><div className="spinner" /></div>}
 
         {/* ── Stats ── */}
         {!loading && tab === 'stats' && stats && (
@@ -497,10 +446,10 @@ export default function AdminPage() {
         {!loading && tab === 'events' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             <div style={{ display: 'flex', gap: '0.5rem', background: '#fff', padding: '0.5rem', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', width: 'fit-content' }}>
-              <button onClick={() => setEvtSubTab('live')} style={{ padding: '0.4rem 1rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: evtSubTab === 'live' ? '#0f172a' : 'transparent', color: evtSubTab === 'live' ? '#fff' : '#64748b' }}>
+              <button onClick={() => setEvtSubTab('live')} style={{ padding: '0.4rem 1rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: evtSubTab === 'live' ? '#FF6B00' : 'transparent', color: evtSubTab === 'live' ? '#fff' : '#64748b' }}>
                 🔴 Live ({liveEvents.length})
               </button>
-              <button onClick={() => setEvtSubTab('history')} style={{ padding: '0.4rem 1rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: evtSubTab === 'history' ? '#0f172a' : 'transparent', color: evtSubTab === 'history' ? '#fff' : '#64748b' }}>
+              <button onClick={() => setEvtSubTab('history')} style={{ padding: '0.4rem 1rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', background: evtSubTab === 'history' ? '#FF6B00' : 'transparent', color: evtSubTab === 'history' ? '#fff' : '#64748b' }}>
                 📋 Historia ({histEvents.length})
               </button>
             </div>
@@ -566,8 +515,6 @@ export default function AdminPage() {
         {/* ── Wallet Tab ── */}
         {!loading && tab === 'wallet' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {/* Sub-tab nav */}
-            {/* Admin earnings summary card */}
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
               <div style={{ flex: 1, minWidth: 140, background: 'linear-gradient(135deg,#1e3a5f,#e85d04)', borderRadius: 14, padding: '1rem 1.25rem', color: '#fff' }}>
                 <div style={{ fontSize: '0.72rem', opacity: 0.8 }}>Jumla ya 10% (Mapato ya Admin)</div>
@@ -588,7 +535,7 @@ export default function AdminPage() {
             <div style={{ display: 'flex', gap: '0.35rem', background: '#fff', padding: '0.4rem', borderRadius: 10, width: 'fit-content', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
               {(['earnings','txns','cards'] as const).map(st => (
                 <button key={st} onClick={() => setWalletSubTab(st)}
-                  style={{ padding: '0.35rem 0.875rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', background: walletSubTab === st ? '#0f172a' : 'transparent', color: walletSubTab === st ? '#fff' : '#64748b' }}>
+                  style={{ padding: '0.35rem 0.875rem', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', background: walletSubTab === st ? '#FF6B00' : 'transparent', color: walletSubTab === st ? '#fff' : '#64748b' }}>
                   {st === 'earnings' ? `💰 Mapato (${adminEarnings.count})` : st === 'txns' ? `💸 Miamala (${walletTxns.length})` : `💳 Kadi (${walletCards.length})`}
                 </button>
               ))}
@@ -603,11 +550,7 @@ export default function AdminPage() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr>
-                        {['#', 'Safari', 'Pickup', 'Destination', 'Nauli Yote', '10% Admin', 'Tarehe'].map(h => (
-                          <th key={h} style={thStyle}>{h}</th>
-                        ))}
-                      </tr>
+                      <tr>{['#', 'Safari', 'Pickup', 'Destination', 'Nauli Yote', '10% Admin', 'Tarehe'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {adminEarnings.earnings.map((e, i) => (
@@ -636,11 +579,7 @@ export default function AdminPage() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr>
-                        {['#', 'Mtumiaji', 'Simu', 'Aina', 'Kiasi', 'Baada', 'Maelezo', 'Safari', 'Tarehe'].map(h => (
-                          <th key={h} style={thStyle}>{h}</th>
-                        ))}
-                      </tr>
+                      <tr>{['#', 'Mtumiaji', 'Simu', 'Aina', 'Kiasi', 'Baada', 'Maelezo', 'Safari', 'Tarehe'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {walletTxns.map((tx, i) => (
@@ -672,7 +611,7 @@ export default function AdminPage() {
                   <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>💳 Kadi za Virtual za Watumiaji</div>
                   <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <button onClick={() => { setShowCreateCard(true); setCreateCardUserId(''); }}
-                      style={{ background: '#0f172a', color: '#fff', border: 'none', borderRadius: 7, padding: '0.35rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                      style={{ background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 7, padding: '0.35rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
                       ➕ Unda Kadi
                     </button>
                     <ExportBar rows={walletCards} name="virtual_cards" />
@@ -681,11 +620,7 @@ export default function AdminPage() {
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr>
-                        {['#', 'Mtumiaji', 'Simu', 'Aina', 'Nambari ya Kadi', 'Tarehe ya Kumalizika', 'Tarehe ya Kutengeneza', 'Vitendo'].map(h => (
-                          <th key={h} style={thStyle}>{h}</th>
-                        ))}
-                      </tr>
+                      <tr>{['#', 'Mtumiaji', 'Simu', 'Aina', 'Nambari ya Kadi', 'Tarehe ya Kumalizika', 'Tarehe ya Kutengeneza', 'Vitendo'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
                       {walletCards.map((c, i) => {
@@ -694,24 +629,24 @@ export default function AdminPage() {
                         const now = new Date();
                         const isExpired = expY < now.getFullYear() || (expY === now.getFullYear() && expM < now.getMonth() + 1);
                         return (
-                        <tr key={String(c.id ?? i)}>
-                          <td style={tdStyle}>{String(c.id)}</td>
-                          <td style={tdStyle}>{String(c.user_name ?? '')}</td>
-                          <td style={tdStyle}>{String(c.user_phone ?? '')}</td>
-                          <td style={tdStyle}>{String(c.user_role ?? '')}</td>
-                          <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{String(c.card_number ?? '')}</td>
-                          <td style={{ ...tdStyle, color: isExpired ? '#ef4444' : '#16a34a', fontWeight: 600 }}>
-                            {String(expM).padStart(2,'0')}/{expY}{isExpired ? ' ⚠️' : ''}
-                          </td>
-                          <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>{c.created_at ? new Date(String(c.created_at)).toLocaleString() : ''}</td>
-                          <td style={tdStyle}>
-                            <div style={{ display:'flex', gap:'0.3rem' }}>
-                              <button onClick={() => extendCard(c.id, 12)} style={{ background:'#dbeafe', color:'#1d4ed8', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>+12M</button>
-                              <button onClick={() => extendCard(c.id, 24)} style={{ background:'#ede9fe', color:'#7c3aed', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>+24M</button>
-                              <button onClick={() => burnCard(c.id, String(c.user_name ?? ''))} style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>🔥</button>
-                            </div>
-                          </td>
-                        </tr>
+                          <tr key={String(c.id ?? i)}>
+                            <td style={tdStyle}>{String(c.id)}</td>
+                            <td style={tdStyle}>{String(c.user_name ?? '')}</td>
+                            <td style={tdStyle}>{String(c.user_phone ?? '')}</td>
+                            <td style={tdStyle}>{String(c.user_role ?? '')}</td>
+                            <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{String(c.card_number ?? '')}</td>
+                            <td style={{ ...tdStyle, color: isExpired ? '#ef4444' : '#16a34a', fontWeight: 600 }}>
+                              {String(expM).padStart(2,'0')}/{expY}{isExpired ? ' ⚠️' : ''}
+                            </td>
+                            <td style={{ ...tdStyle, color: '#64748b', whiteSpace: 'nowrap' }}>{c.created_at ? new Date(String(c.created_at)).toLocaleString() : ''}</td>
+                            <td style={tdStyle}>
+                              <div style={{ display:'flex', gap:'0.3rem' }}>
+                                <button onClick={() => extendCard(c.id, 12)} style={{ background:'#dbeafe', color:'#1d4ed8', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>+12M</button>
+                                <button onClick={() => extendCard(c.id, 24)} style={{ background:'#ede9fe', color:'#7c3aed', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>+24M</button>
+                                <button onClick={() => burnCard(c.id, String(c.user_name ?? ''))} style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:5, padding:'0.25rem 0.5rem', fontSize:'0.72rem', cursor:'pointer', fontWeight:600 }}>🔥</button>
+                              </div>
+                            </td>
+                          </tr>
                         );
                       })}
                     </tbody>
@@ -724,7 +659,7 @@ export default function AdminPage() {
 
         {/* ── Admin Profile ── */}
         {tab === 'profile' && (
-          <div style={{ maxWidth: 500 }}>
+          <div style={{ maxWidth: 440, margin: '0 auto' }}>
             <div style={{ background: '#fff', borderRadius: 14, padding: '1.5rem', boxShadow: '0 1px 8px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #f3f4f6' }}>
                 <div style={{ width: 64, height: 64, borderRadius: '50%', background: profileImg ? 'transparent' : '#FF6B00', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, border: '2px solid #e5e7eb' }}>
@@ -755,13 +690,24 @@ export default function AdminPage() {
 
               {profileSaved && <div style={{ color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '0.5rem 0.875rem', fontSize: '0.83rem' }}>✅ Imehifadhiwa!</div>}
 
-              <button onClick={saveProfile} style={{ background: '#0f172a', color: '#fff', border: 'none', borderRadius: 9, padding: '0.7rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+              <button onClick={saveProfile} style={{ background: 'linear-gradient(135deg,#1e3a5f,#FF6B00)', color: '#fff', border: 'none', borderRadius: 9, padding: '0.7rem', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
                 Hifadhi Taarifa
               </button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Bottom nav — same style as rider/driver Dashboard */}
+      <nav style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff', borderTop: '1px solid #e5e7eb', display: 'flex', zIndex: 100, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        {navItems.map(item => (
+          <button key={item.id} onClick={() => setTab(item.id)}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.45rem 0.15rem 0.35rem', background: 'none', border: 'none', cursor: 'pointer', color: tab === item.id ? '#FF6B00' : '#9ca3af', minWidth: 0 }}>
+            <span style={{ fontSize: '1.05rem', lineHeight: 1 }}>{item.icon}</span>
+            <span style={{ fontSize: '0.57rem', marginTop: '0.18rem', fontWeight: tab === item.id ? 700 : 500, lineHeight: 1, whiteSpace: 'nowrap' }}>{item.label}</span>
+          </button>
+        ))}
+      </nav>
 
       {/* Edit User Modal */}
       {editUser && (
@@ -772,7 +718,7 @@ export default function AdminPage() {
           <Select label="Role" value={editUserForm.role} onChange={v => setEditUserForm(p => ({ ...p, role: v }))} options={[{ value: 'RIDER', label: 'RIDER' }, { value: 'DRIVER', label: 'DRIVER' }]} />
           <Select label="Status" value={editUserForm.status} onChange={v => setEditUserForm(p => ({ ...p, status: v }))} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={saveEditUser} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
+            <button onClick={saveEditUser} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
             <button onClick={() => setEditUser(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
           </div>
         </Modal>
@@ -789,7 +735,7 @@ export default function AdminPage() {
           <Input label="Nambari ya Leseni" value={editDriverForm.license_number} onChange={v => setEditDriverForm(p => ({ ...p, license_number: v }))} />
           <Select label="Uthibitisho" value={editDriverForm.verification_status} onChange={v => setEditDriverForm(p => ({ ...p, verification_status: v }))} options={[{ value: 'PENDING', label: 'PENDING' }, { value: 'VERIFIED', label: 'VERIFIED' }, { value: 'REJECTED', label: 'REJECTED' }]} />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={saveEditDriver} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
+            <button onClick={saveEditDriver} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
             <button onClick={() => setEditDriver(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
           </div>
         </Modal>
@@ -803,7 +749,7 @@ export default function AdminPage() {
           <Input label="Mahali pa Kuanzia" value={editTripForm.pickup_address} onChange={v => setEditTripForm(p => ({ ...p, pickup_address: v }))} />
           <Input label="Mahali pa Kwenda" value={editTripForm.destination_address} onChange={v => setEditTripForm(p => ({ ...p, destination_address: v }))} />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={saveEditTrip} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
+            <button onClick={saveEditTrip} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Hifadhi</button>
             <button onClick={() => setEditTrip(null)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
           </div>
         </Modal>
@@ -817,7 +763,7 @@ export default function AdminPage() {
           </p>
           <Input label="User ID" value={createCardUserId} onChange={setCreateCardUserId} placeholder="e.g. 42" />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button onClick={createCardForUser} style={{ flex: 1, padding: '0.65rem', background: '#0f172a', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Unda</button>
+            <button onClick={createCardForUser} style={{ flex: 1, padding: '0.65rem', background: '#FF6B00', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Unda</button>
             <button onClick={() => setShowCreateCard(false)} style={{ flex: 1, padding: '0.65rem', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>Funga</button>
           </div>
         </Modal>
@@ -836,7 +782,7 @@ export default function AdminPage() {
 
       {/* Toast */}
       {actionMsg && (
-        <div onClick={() => setActionMsg('')} style={{ position: 'fixed', bottom: 24, right: 24, background: '#0f172a', color: '#fff', padding: '0.75rem 1.25rem', borderRadius: 10, fontSize: '0.85rem', zIndex: 2000, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+        <div onClick={() => setActionMsg('')} style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: '#1e3a5f', color: '#fff', padding: '0.75rem 1.5rem', borderRadius: 10, fontSize: '0.85rem', zIndex: 2000, cursor: 'pointer', boxShadow: '0 4px 16px rgba(0,0,0,0.2)', whiteSpace: 'nowrap' }}>
           {actionMsg}
         </div>
       )}

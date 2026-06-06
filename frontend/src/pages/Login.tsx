@@ -33,14 +33,13 @@ export default function Login() {
     try {
       await login({ email_or_phone: emailOrPhone, password });
       navigate('/dashboard', { replace: true });
-    } catch (err) {
-      // Try admin login
+    } catch (regularErr) {
       try {
         const { data } = await axios.post('/admin-api/admin/login', { username: emailOrPhone, password });
         localStorage.setItem('admin_token', data.access_token);
         navigate('/admin', { replace: true });
       } catch {
-        setError(extractApiError(err));
+        setError(extractApiError(regularErr));
       }
     } finally {
       setIsLoading(false);
