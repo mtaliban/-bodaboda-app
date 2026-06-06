@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import axios from 'axios';
+import * as XLSX from 'xlsx';
 import { useLang } from '../context/LanguageContext';
 
 const ADMIN_API = `${window.location.protocol}//${window.location.host}/admin-api`;
@@ -15,36 +16,46 @@ interface HistEvent { id: number; trip_id: number; event_type: string; changed_b
 function fmtDate(s: string) { return new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); }
 function fmtTime(s: string) { return new Date(s).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
 
-function triggerDownload(content: string, filename: string) {
-  const a = document.createElement('a');
-  a.href = `data:text/csv;charset=utf-8,${encodeURIComponent(content)}`;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
-
 function exportCsv(rows: Record<string, unknown>[], filename: string) {
   if (!rows.length) return;
   const cols = Object.keys(rows[0]);
   const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csv = '﻿' + [cols.map(escape).join(','), ...rows.map(r => cols.map(c => escape(r[c])).join(','))].join('\r\n');
-  triggerDownload(csv, filename);
+  const a = document.createElement('a');
+  a.href = `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`;
+  a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
 function exportExcel(rows: Record<string, unknown>[], filename: string) {
   if (!rows.length) return;
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // Auto column widths based on content
   const cols = Object.keys(rows[0]);
-  const escape = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = '﻿' + [cols.map(escape).join(','), ...rows.map(r => cols.map(c => escape(r[c])).join(','))].join('\r\n');
-  triggerDownload(csv, filename.replace(/\.xls$/, '.csv'));
+  ws['!cols'] = cols.map(col => {
+    const maxLen = Math.max(
+      col.length,
+      ...rows.map(r => String(r[col] ?? '').length),
+    );
+    return { wch: Math.min(Math.max(maxLen + 2, 10), 60) };
+  });
+  // Bold header row
+  const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
+  for (let C = range.s.c; C <= range.e.c; C++) {
+    const addr = XLSX.utils.encode_cell({ r: 0, c: C });
+    if (ws[addr]) ws[addr].s = { font: { bold: true }, fill: { fgColor: { rgb: 'E8F0FE' } } };
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Data');
+  const base = filename.replace(/\.(xlsx?|csv)$/i, '');
+  XLSX.writeFile(wb, `${base}.xlsx`);
 }
 
 function ExportBar({ rows, name }: { rows: Record<string, unknown>[]; name: string }) {
   return (
     <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-      <button onClick={() => exportCsv(rows, `${name}.csv`)} style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>📥 CSV</button>
-      <button onClick={() => exportExcel(rows, `${name}.xls`)} style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>📊 Excel</button>
+      <button onClick={() => exportCsv(rows, name)} style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>📥 CSV</button>
+      <button onClick={() => exportExcel(rows, name)} style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '0.3rem 0.75rem', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}>📊 Excel</button>
     </div>
   );
 }
@@ -350,24 +361,31 @@ export default function AdminPage() {
 
   function Pagination({ page, total, limit, onPage }: { page: number; total: number; limit: number; onPage: (p: number) => void }) {
     const pages = Math.max(1, Math.ceil(total / limit));
-    if (pages <= 1) return null;
+    const from = total === 0 ? 0 : (page - 1) * limit + 1;
+    const to = Math.min(page * limit, total);
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.75rem 1rem', borderTop: '1px solid #f3f4f6', justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
-        <button onClick={() => onPage(page - 1)} disabled={page <= 1}
-          style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: page <= 1 ? '#f9fafb' : '#fff', cursor: page <= 1 ? 'default' : 'pointer', fontSize: '0.8rem', color: '#374151' }}>‹</button>
-        {Array.from({ length: pages }, (_, i) => i + 1).filter(p => p === 1 || p === pages || Math.abs(p - page) <= 1).reduce<(number|string)[]>((acc, p, i, arr) => {
-          if (i > 0 && (p as number) - (arr[i-1] as number) > 1) acc.push('…');
-          acc.push(p);
-          return acc;
-        }, []).map((p, i) => (
-          <button key={i} onClick={() => typeof p === 'number' && onPage(p)} disabled={p === page || typeof p !== 'number'}
-            style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: p === page ? '#FF6B00' : '#fff', color: p === page ? '#fff' : '#374151', fontWeight: p === page ? 700 : 400, cursor: typeof p !== 'number' ? 'default' : 'pointer', fontSize: '0.8rem' }}>
-            {p}
-          </button>
-        ))}
-        <button onClick={() => onPage(page + 1)} disabled={page >= pages}
-          style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: page >= pages ? '#f9fafb' : '#fff', cursor: page >= pages ? 'default' : 'pointer', fontSize: '0.8rem', color: '#374151' }}>›</button>
-        <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginLeft: '0.25rem' }}>{total} {t('admin.records')}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.65rem 1rem', borderTop: '1px solid #f3f4f6', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+          {total > 0 ? `${from}–${to} / ${total} ${t('admin.records')}` : `0 ${t('admin.records')}`}
+        </span>
+        {pages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button onClick={() => onPage(page - 1)} disabled={page <= 1}
+              style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: page <= 1 ? '#f9fafb' : '#fff', cursor: page <= 1 ? 'default' : 'pointer', fontSize: '0.8rem', color: '#374151' }}>‹</button>
+            {Array.from({ length: pages }, (_, i) => i + 1).filter(p => p === 1 || p === pages || Math.abs(p - page) <= 1).reduce<(number|string)[]>((acc, p, i, arr) => {
+              if (i > 0 && (p as number) - (arr[i-1] as number) > 1) acc.push('…');
+              acc.push(p);
+              return acc;
+            }, []).map((p, i) => (
+              <button key={i} onClick={() => typeof p === 'number' && onPage(p)} disabled={p === page || typeof p !== 'number'}
+                style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: p === page ? '#FF6B00' : '#fff', color: p === page ? '#fff' : '#374151', fontWeight: p === page ? 700 : 400, cursor: typeof p !== 'number' ? 'default' : 'pointer', fontSize: '0.8rem' }}>
+                {p}
+              </button>
+            ))}
+            <button onClick={() => onPage(page + 1)} disabled={page >= pages}
+              style={{ padding: '0.3rem 0.65rem', borderRadius: 6, border: '1px solid #e5e7eb', background: page >= pages ? '#f9fafb' : '#fff', cursor: page >= pages ? 'default' : 'pointer', fontSize: '0.8rem', color: '#374151' }}>›</button>
+          </div>
+        )}
       </div>
     );
   }

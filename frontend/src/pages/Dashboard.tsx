@@ -3287,7 +3287,6 @@ function DriverWalletTab() {
 function getNavItems(role: string, _unreadCount: number, t: (key: string) => string): NavItem[] {
   if (role === 'RIDER') {
     return [
-      { tab: 'home',         label: t('dashboard.driverHome'),  icon: <IconHome />     },
       { tab: 'request-ride', label: t('dashboard.requestRide'), icon: <IconMoto />     },
       { tab: 'my-trips',     label: t('dashboard.myTrips'),     icon: <IconList />     },
       { tab: 'wallet',       label: t('dashboard.wallet'),      icon: <span style={{fontSize:'1.1rem'}}>💰</span> },
@@ -3365,7 +3364,7 @@ function BottomNav({ user, activeTab, setActiveTab, onLogout, unreadCount }: {
   unreadCount: number;
 }) {
   const { t } = useLang();
-  const navItems = getNavItems(user.role, unreadCount, t).slice(0, 4);
+  const navItems = getNavItems(user.role, unreadCount, t);
   return (
     <nav className="spa-bottom-nav">
       <div className="spa-bottom-nav-inner">
