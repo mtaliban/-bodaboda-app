@@ -150,6 +150,12 @@ export default function AdminPage() {
   const [usersMeta, setUsersMeta] = useState<{ total: number; limit: number }>({ total: 0, limit: 100 });
   const [tripsPage, setTripsPage] = useState(1);
   const [tripsMeta, setTripsMeta] = useState<{ total: number; limit: number }>({ total: 0, limit: 100 });
+  const [driversPage, setDriversPage] = useState(1);
+  const [histPage, setHistPage] = useState(1);
+  const [earningsPage, setEarningsPage] = useState(1);
+  const [txnsPage, setTxnsPage] = useState(1);
+  const [cardsPage, setCardsPage] = useState(1);
+  const CLIENT_PAGE = 30;
   const [apiError, setApiError] = useState('');
   const [actionMsg, setActionMsg] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
@@ -569,7 +575,7 @@ export default function AdminPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead><tr>{[t('admin.name'),t('admin.phone'),'Bodaboda',lang==='sw'?'Nambari':'Plate',lang==='sw'?'Leseni':'License',lang==='sw'?'Uthibitisho':'Verification',t('admin.status'),'Rating',t('admin.actions')].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
                 <tbody>
-                  {drivers.map(d => (
+                  {drivers.slice((driversPage - 1) * CLIENT_PAGE, driversPage * CLIENT_PAGE).map(d => (
                     <tr key={d.user_id}>
                       <td style={{ ...tdStyle, fontWeight: 600 }}>{d.full_name}</td>
                       <td style={tdStyle}>{d.phone}</td>
@@ -601,6 +607,7 @@ export default function AdminPage() {
                 </tbody>
               </table>
             </div>
+            <Pagination page={driversPage} total={drivers.length} limit={CLIENT_PAGE} onPage={setDriversPage} />
           </div>
         )}
 
@@ -655,7 +662,7 @@ export default function AdminPage() {
                     <tbody>
                       {histEvents.length === 0
                         ? <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Hakuna historia bado.</td></tr>
-                        : histEvents.map(ev => (
+                        : histEvents.slice((histPage - 1) * CLIENT_PAGE, histPage * CLIENT_PAGE).map(ev => (
                           <tr key={ev.id}>
                             <td style={{ ...tdStyle, color: '#9ca3af', whiteSpace: 'nowrap' }}>{fmtDate(ev.timestamp)} {fmtTime(ev.timestamp)}</td>
                             <td style={{ ...tdStyle, color: '#3b82f6', fontWeight: 700 }}>#{ev.trip_id}</td>
@@ -669,6 +676,7 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination page={histPage} total={histEvents.length} limit={CLIENT_PAGE} onPage={setHistPage} />
               </div>
             )}
           </div>
@@ -715,7 +723,7 @@ export default function AdminPage() {
                       <tr>{['#', 'Safari', 'Pickup', 'Destination', 'Nauli Yote', '10% Admin', 'Tarehe'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
-                      {adminEarnings.earnings.map((e, i) => (
+                      {adminEarnings.earnings.slice((earningsPage - 1) * CLIENT_PAGE, earningsPage * CLIENT_PAGE).map((e, i) => (
                         <tr key={String(e.id ?? i)}>
                           <td style={tdStyle}>{String(e.id)}</td>
                           <td style={{ ...tdStyle, color: '#6366f1', fontWeight: 700 }}>{e.trip_id ? `#${e.trip_id}` : '—'}</td>
@@ -729,6 +737,7 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination page={earningsPage} total={adminEarnings.earnings.length} limit={CLIENT_PAGE} onPage={setEarningsPage} />
               </div>
             )}
 
@@ -744,7 +753,7 @@ export default function AdminPage() {
                       <tr>{['#', 'Mtumiaji', 'Simu', 'Aina', 'Kiasi', 'Baada', 'Maelezo', 'Safari', 'Tarehe'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
-                      {walletTxns.map((tx, i) => (
+                      {walletTxns.slice((txnsPage - 1) * CLIENT_PAGE, txnsPage * CLIENT_PAGE).map((tx, i) => (
                         <tr key={String(tx.id ?? i)}>
                           <td style={tdStyle}>{String(tx.id)}</td>
                           <td style={tdStyle}>{String(tx.user_name ?? '')}</td>
@@ -764,6 +773,7 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination page={txnsPage} total={walletTxns.length} limit={CLIENT_PAGE} onPage={setTxnsPage} />
               </div>
             )}
 
@@ -785,7 +795,7 @@ export default function AdminPage() {
                       <tr>{['#', 'Mtumiaji', 'Simu', 'Aina', 'Nambari ya Kadi', 'Tarehe ya Kumalizika', 'Tarehe ya Kutengeneza', 'Vitendo'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
                     </thead>
                     <tbody>
-                      {walletCards.map((c, i) => {
+                      {walletCards.slice((cardsPage - 1) * CLIENT_PAGE, cardsPage * CLIENT_PAGE).map((c, i) => {
                         const expM = Number(c.expiry_month ?? 0);
                         const expY = Number(c.expiry_year ?? 0);
                         const now = new Date();
@@ -820,6 +830,7 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
+                <Pagination page={cardsPage} total={walletCards.length} limit={CLIENT_PAGE} onPage={setCardsPage} />
               </div>
             )}
           </div>
