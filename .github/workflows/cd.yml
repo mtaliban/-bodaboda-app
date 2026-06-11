@@ -22,33 +22,54 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Set version tag
+        id: vars
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "version=v1.${{ github.run_number }}.0" >> $GITHUB_OUTPUT
+          echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "🏷️  Version tag: v1.${{ github.run_number }}.0"
+          echo "🔖 Git SHA tag: $SHORT_SHA"
+
       - name: Build and push auth_service
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:${{ steps.vars.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:${{ steps.vars.outputs.sha }}
 
       - name: Build and push driver_service
         uses: docker/build-push-action@v5
         with:
           context: ./driver_service
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:${{ steps.vars.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:${{ steps.vars.outputs.sha }}
 
       - name: Build and push admin_service
         uses: docker/build-push-action@v5
         with:
           context: ./admin_service
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-admin:latest
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-admin:latest
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-admin:${{ steps.vars.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-admin:${{ steps.vars.outputs.sha }}
 
       - name: Build and push frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:latest
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:${{ steps.vars.outputs.version }}
+            ${{ secrets.DOCKER_USERNAME }}/bodaboda-frontend:${{ steps.vars.outputs.sha }}
 
   deploy-staging:
     needs: build-and-push

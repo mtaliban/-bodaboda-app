@@ -110,7 +110,7 @@ services:
         VITE_DRIVER_SERVICE_URL: ${VITE_DRIVER_SERVICE_URL:-}
     image: ${DOCKER_USERNAME}/bodaboda-frontend:latest
     ports:
-      - "80:80"
+      - "5173:80"
     depends_on:
       - auth_service
     networks:
