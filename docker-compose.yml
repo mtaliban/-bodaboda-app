@@ -1,4 +1,4 @@
-# Deploy: 2026-06-17 — Grafana port 3000 redeploy
+# Deploy: 2026-06-18 — disk cleaned, Grafana redeploy
 services:
   db:
     image: postgres:16-alpine
