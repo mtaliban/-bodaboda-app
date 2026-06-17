@@ -3,7 +3,7 @@ import mqtt, { MqttClient } from 'mqtt';
 
 // HiveMQ Cloud — hosted MQTT broker (Assignment 3 third-party integration)
 const HIVEMQ_WS_URL  = 'wss://my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud:8884/mqtt';
-const HIVEMQ_USER    = 'mtalibabi';
+const HIVEMQ_USER    = 'mtalibani';
 const HIVEMQ_PASS    = 'Mimi$100';
 
 const MQTT_WS_URL = HIVEMQ_WS_URL;

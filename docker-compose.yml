@@ -44,7 +44,7 @@ services:
       JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
       MQTT_HOST: my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud
       MQTT_PORT: 8883
-      MQTT_USER: mtalibabi
+      MQTT_USER: mtalibani
       MQTT_PASSWORD: "Mimi$100"
     depends_on:
       db:
@@ -72,7 +72,7 @@ services:
       SMTP_STARTTLS: "false"
       MQTT_HOST: my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud
       MQTT_PORT: 8883
-      MQTT_USER: mtalibabi
+      MQTT_USER: mtalibani
       MQTT_PASSWORD: "Mimi$100"
     depends_on:
       db:
@@ -92,7 +92,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/auth_db
       MQTT_HOST: my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud
       MQTT_PORT: 8883
-      MQTT_USER: mtalibabi
+      MQTT_USER: mtalibani
       MQTT_PASSWORD: "Mimi$100"
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: BodaBoda@Admin2026!
