@@ -1,4 +1,4 @@
-# Deploy: 2026-06-18 — disk cleaned, Grafana redeploy
+# Deploy: 2026-06-18 — all improvements active
 services:
   db:
     image: postgres:16-alpine
