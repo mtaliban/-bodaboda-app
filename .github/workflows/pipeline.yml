@@ -157,6 +157,35 @@ jobs:
               sys.exit(1)
           EOF
 
+      # IMPROVEMENT 2: Verify HiveMQ Cloud credentials before deploy
+      - name: Verify HiveMQ Cloud credentials (catch typos early)
+        run: |
+          pip install aiomqtt
+          python3 - <<'EOF'
+          import ssl, asyncio, aiomqtt, os, sys
+
+          async def test():
+              host = "my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud"
+              user = "mtalibani"
+              pwd  = "Mimi$100"
+              ctx  = ssl.create_default_context()
+              try:
+                  async with aiomqtt.Client(
+                      hostname=host, port=8883,
+                      username=user, password=pwd,
+                      tls_context=ctx,
+                      identifier="ci-hivemq-check",
+                  ) as c:
+                      await c.publish("ci/test/ping", "ok")
+                      print(f"HiveMQ OK — connected as {user}")
+              except Exception as e:
+                  print(f"HiveMQ FAILED — {e}")
+                  print("Check MQTT_USER and MQTT_PASSWORD in docker-compose.yml")
+                  sys.exit(1)
+
+          asyncio.run(test())
+          EOF
+
   # ─────────────────────────────────────────────────────────────
   # STAGE 3 — Build Docker Image
   # ─────────────────────────────────────────────────────────────
@@ -267,6 +296,13 @@ jobs:
             set -e
             cd /opt/bodaboda
             git pull origin main
+
+            # IMPROVEMENT 1: Auto disk cleanup before pull (prevents disk-full SSH failures)
+            echo "=== Disk before cleanup ==="
+            df -h /
+            docker system prune -af --volumes 2>/dev/null || true
+            echo "=== Disk after cleanup ==="
+            df -h /
 
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
