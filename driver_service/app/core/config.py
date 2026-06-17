@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     MQTT_HOST: str = "mosquitto"
     MQTT_PORT: int = 1883
+    MQTT_USER: str = ""
+    MQTT_PASSWORD: str = ""
 
 
 settings = Settings()

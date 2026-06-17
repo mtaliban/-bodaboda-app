@@ -42,13 +42,13 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/auth_db
       JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
+      MQTT_HOST: my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud
+      MQTT_PORT: 8883
+      MQTT_USER: mtalibabi
+      MQTT_PASSWORD: "Mimi$100"
     depends_on:
       db:
         condition: service_healthy
-      mosquitto:
-        condition: service_started
     networks:
       - app_net
     restart: unless-stopped
@@ -70,11 +70,13 @@ services:
       SMTP_PASSWORD: hrnjxnmxhavtsufy
       SMTP_FROM: bodabodaapp124@gmail.com
       SMTP_STARTTLS: "false"
+      MQTT_HOST: my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud
+      MQTT_PORT: 8883
+      MQTT_USER: mtalibabi
+      MQTT_PASSWORD: "Mimi$100"
     depends_on:
       db:
         condition: service_healthy
-      mosquitto:
-        condition: service_started
     networks:
       - app_net
     restart: unless-stopped
@@ -88,16 +90,16 @@ services:
       - "8003:8003"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:password@db:5432/auth_db
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
+      MQTT_HOST: my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud
+      MQTT_PORT: 8883
+      MQTT_USER: mtalibabi
+      MQTT_PASSWORD: "Mimi$100"
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: BodaBoda@Admin2026!
       ADMIN_JWT_SECRET: admin-super-secret-key-change-in-prod
     depends_on:
       db:
         condition: service_healthy
-      mosquitto:
-        condition: service_started
     networks:
       - app_net
     restart: unless-stopped
@@ -110,6 +112,7 @@ services:
         VITE_DRIVER_SERVICE_URL: ${VITE_DRIVER_SERVICE_URL:-}
     image: ${DOCKER_USERNAME}/bodaboda-frontend:latest
     ports:
+      - "80:80"
       - "5173:80"
     depends_on:
       - auth_service

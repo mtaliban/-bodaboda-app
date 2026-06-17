@@ -6,6 +6,7 @@ Runs as a background asyncio task when the app starts.
 import asyncio
 import json
 import logging
+import ssl
 
 import aiomqtt
 from sqlalchemy import select
@@ -16,6 +17,20 @@ from app.models.driver import Driver, DriverStatus
 from app.services.mqtt_publisher import publish
 
 logger = logging.getLogger(__name__)
+
+
+def _mqtt_client_kwargs() -> dict:
+    kwargs: dict = {
+        "hostname": settings.MQTT_HOST,
+        "port":     settings.MQTT_PORT,
+    }
+    if settings.MQTT_USER:
+        kwargs["username"] = settings.MQTT_USER
+    if settings.MQTT_PASSWORD:
+        kwargs["password"] = settings.MQTT_PASSWORD
+    if settings.MQTT_PORT == 8883:
+        kwargs["tls_context"] = ssl.create_default_context()
+    return kwargs
 
 _subscriber_task: asyncio.Task | None = None
 
@@ -52,7 +67,7 @@ async def _subscriber_loop() -> None:
     while True:
         try:
             logger.info("MQTT Subscriber connecting to %s:%d", settings.MQTT_HOST, settings.MQTT_PORT)
-            async with aiomqtt.Client(hostname=settings.MQTT_HOST, port=settings.MQTT_PORT) as client:
+            async with aiomqtt.Client(**_mqtt_client_kwargs()) as client:
                 await client.subscribe("rides/new", qos=1)
                 logger.info("MQTT Subscriber ready | listening on rides/new")
 

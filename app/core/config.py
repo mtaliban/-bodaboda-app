@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     AT_USERNAME: str = "sandbox"
     AT_SENDER_ID: str = "BodaBoda"
 
+    # MQTT broker settings
+    MQTT_HOST: str = "mosquitto"
+    MQTT_PORT: int = 1883
+    MQTT_USER: str = ""
+    MQTT_PASSWORD: str = ""
+
     # Social auth
     GOOGLE_CLIENT_ID: str = ""   # from Google Cloud Console
     APPLE_APP_ID: str = ""       # Apple bundle ID / service ID

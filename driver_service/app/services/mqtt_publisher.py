@@ -1,4 +1,5 @@
 import json
+import ssl
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -20,10 +21,24 @@ def _build_event(event_type: str, payload: dict) -> str:
     })
 
 
+def _mqtt_client_kwargs() -> dict:
+    kwargs: dict = {
+        "hostname": settings.MQTT_HOST,
+        "port":     settings.MQTT_PORT,
+    }
+    if settings.MQTT_USER:
+        kwargs["username"] = settings.MQTT_USER
+    if settings.MQTT_PASSWORD:
+        kwargs["password"] = settings.MQTT_PASSWORD
+    if settings.MQTT_PORT == 8883:
+        kwargs["tls_context"] = ssl.create_default_context()
+    return kwargs
+
+
 async def publish(topic: str, event_type: str, payload: dict, retain: bool = False) -> None:
     message = _build_event(event_type, payload)
     try:
-        async with aiomqtt.Client(hostname=settings.MQTT_HOST, port=settings.MQTT_PORT) as client:
+        async with aiomqtt.Client(**_mqtt_client_kwargs()) as client:
             await client.publish(topic, payload=message, qos=1, retain=retain)
             logger.info("MQTT published | topic=%s event=%s retain=%s", topic, event_type, retain)
     except Exception as exc:

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
 import mqtt, { MqttClient } from 'mqtt';
 
-// On HTTPS: route MQTT WebSocket through nginx at /mqtt (wss://)
-// On HTTP:  connect directly to Mosquitto port 9001 (ws://)
-const MQTT_WS_URL = window.location.protocol === 'https:'
-  ? `wss://${window.location.hostname}/mqtt`
-  : `ws://${window.location.hostname}:9001`;
+// HiveMQ Cloud — hosted MQTT broker (Assignment 3 third-party integration)
+const HIVEMQ_WS_URL  = 'wss://my-bodaboda-cce7baf3.a03.euc1.aws.hivemq.cloud:8884/mqtt';
+const HIVEMQ_USER    = 'mtalibabi';
+const HIVEMQ_PASS    = 'Mimi$100';
+
+const MQTT_WS_URL = HIVEMQ_WS_URL;
 
 export interface MqttEvent {
   event_id: string;
@@ -25,6 +26,8 @@ export function useMqtt(topics: string[], onMessage: Handler) {
 
   useEffect(() => {
     const client = mqtt.connect(MQTT_WS_URL, {
+      username: HIVEMQ_USER,
+      password: HIVEMQ_PASS,
       reconnectPeriod: 3000,
       connectTimeout: 10000,
     });
