@@ -106,8 +106,18 @@ jobs:
           pip install -r requirements.txt
           pip install pytest pytest-anyio anyio httpx paho-mqtt
 
-      - name: Run backend tests
-        run: python3 -m pytest tests/ -v
+      - name: Run backend tests with coverage report
+        run: |
+          pip install pytest-cov
+          python3 -m pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml
+          echo "✓ Coverage report generated"
+
+      - name: Upload coverage report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 7
 
       - name: MQTT integration test (publish -> receive)
         run: |
@@ -325,6 +335,51 @@ jobs:
 
             echo "Deploy complete!"
           ENDSSH
+
+      - name: Send email notification on success
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: bodabodaapp124@gmail.com
+          password: hrnjxnmxhavtsufy
+          subject: "✅ BodaBoda Deploy SUCCESS — Run #${{ github.run_number }}"
+          to: hamisiselemani200@gmail.com
+          from: BodaBoda CI/CD <bodabodaapp124@gmail.com>
+          body: |
+            ✅ Deployment imefanikiwa!
+
+            Commit: ${{ github.sha }}
+            Branch: ${{ github.ref_name }}
+            Run: #${{ github.run_number }}
+            Server: http://3.85.53.81:5173
+
+            BodaBoda Pipeline — CS 421
+
+      - name: Send email notification on failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: bodabodaapp124@gmail.com
+          password: hrnjxnmxhavtsufy
+          subject: "❌ BodaBoda Deploy FAILED — Run #${{ github.run_number }}"
+          to: hamisiselemani200@gmail.com
+          from: BodaBoda CI/CD <bodabodaapp124@gmail.com>
+          body: |
+            ❌ Deployment imeshindwa!
+
+            Commit: ${{ github.sha }}
+            Branch: ${{ github.ref_name }}
+            Run: #${{ github.run_number }}
+
+            Angalia logs: https://github.com/mtaliban/-bodaboda-app/actions
+
+            BodaBoda Pipeline — CS 421
 
   # ─────────────────────────────────────────────────────────────
   # STAGE 6 — Run MQTT-enabled Application (verify on server)
