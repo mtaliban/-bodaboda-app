@@ -1,3 +1,4 @@
+# Deploy: 2026-06-17 — HiveMQ username fix (mtalibani)
 services:
   db:
     image: postgres:16-alpine
