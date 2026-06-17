@@ -305,7 +305,6 @@ jobs:
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << ENDSSH
             set -e
             cd /opt/bodaboda
-            git pull origin main
 
             # IMPROVEMENT 1: Auto disk cleanup before pull (prevents disk-full SSH failures)
             echo "=== Disk before cleanup ==="
@@ -313,6 +312,12 @@ jobs:
             docker system prune -af --volumes 2>/dev/null || true
             echo "=== Disk after cleanup ==="
             df -h /
+
+            # IMPROVEMENT 3: Save current commit as rollback point
+            PREVIOUS_COMMIT=$(git rev-parse HEAD)
+            echo "Rollback point saved: $PREVIOUS_COMMIT"
+
+            git pull origin main
 
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-backend:latest
             docker pull ${{ secrets.DOCKER_USERNAME }}/bodaboda-driver:latest
@@ -329,11 +334,35 @@ jobs:
 
             sleep 30
 
-            curl -sf http://localhost:8001/health && echo "Auth OK" || (echo "Auth FAILED" && exit 1)
-            curl -sf http://localhost:8002/health && echo "Driver OK" || (echo "Driver FAILED" && exit 1)
-            curl -sf http://localhost:8003/health && echo "Admin OK" || (echo "Admin FAILED" && exit 1)
+            # Health checks — if fail, rollback automatically
+            if ! curl -sf http://localhost:8001/health; then
+              echo "❌ Auth FAILED — rolling back to $PREVIOUS_COMMIT"
+              git checkout $PREVIOUS_COMMIT
+              DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d --force-recreate
+              echo "✅ Rollback complete"
+              exit 1
+            fi
+            echo "Auth OK"
 
-            echo "Deploy complete!"
+            if ! curl -sf http://localhost:8002/health; then
+              echo "❌ Driver FAILED — rolling back to $PREVIOUS_COMMIT"
+              git checkout $PREVIOUS_COMMIT
+              DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d --force-recreate
+              echo "✅ Rollback complete"
+              exit 1
+            fi
+            echo "Driver OK"
+
+            if ! curl -sf http://localhost:8003/health; then
+              echo "❌ Admin FAILED — rolling back to $PREVIOUS_COMMIT"
+              git checkout $PREVIOUS_COMMIT
+              DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} docker compose up -d --force-recreate
+              echo "✅ Rollback complete"
+              exit 1
+            fi
+            echo "Admin OK"
+
+            echo "✅ Deploy complete! All services healthy."
           ENDSSH
 
       - name: Send email notification on success
