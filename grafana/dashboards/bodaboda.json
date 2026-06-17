@@ -1,0 +1,118 @@
+{
+  "title": "BodaBoda CI/CD Pipeline Dashboard",
+  "uid": "bodaboda-cicd",
+  "version": 1,
+  "schemaVersion": 36,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Pipeline Build Time per Stage (seconds)",
+      "type": "barchart",
+      "gridPos": { "x": 0, "y": 0, "w": 14, "h": 8 },
+      "datasource": "TestData",
+      "options": {
+        "orientation": "horizontal",
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "datasource": "TestData",
+          "scenarioId": "csv_content",
+          "csvContent": "Stage,Seconds\n1. Build Application,90\n2. Run Tests,165\n3. Build Docker Image,72\n4. Push to Docker Hub,120\n5. Deploy to Server,78\n6. Run MQTT App,22",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Test Success Rate (%)",
+      "type": "gauge",
+      "gridPos": { "x": 14, "y": 0, "w": 5, "h": 4 },
+      "datasource": "TestData",
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "minVizWidth": 75,
+        "minVizHeight": 75,
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 80 },
+            { "color": "green", "value": 95 }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": "TestData",
+          "scenarioId": "csv_content",
+          "csvContent": "Time,Value\n2026-06-17,100",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Downtime per Deployment (seconds)",
+      "type": "gauge",
+      "gridPos": { "x": 14, "y": 4, "w": 5, "h": 4 },
+      "datasource": "TestData",
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 60 },
+            { "color": "red", "value": 120 }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": "TestData",
+          "scenarioId": "csv_content",
+          "csvContent": "Time,Value\n2026-06-17,40",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "MQTT Message Latency (ms)",
+      "type": "barchart",
+      "gridPos": { "x": 0, "y": 8, "w": 10, "h": 7 },
+      "datasource": "TestData",
+      "options": {
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "datasource": "TestData",
+          "scenarioId": "csv_content",
+          "csvContent": "Event,Milliseconds\nRIDE_REQUESTED (publish),0\nNEW_TRIP_OFFER (driver),531\nRIDE_AVAILABLE (broadcast),534",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Deployment Frequency (Jun 10-17)",
+      "type": "barchart",
+      "gridPos": { "x": 10, "y": 8, "w": 9, "h": 7 },
+      "datasource": "TestData",
+      "options": {
+        "orientation": "vertical"
+      },
+      "targets": [
+        {
+          "datasource": "TestData",
+          "scenarioId": "csv_content",
+          "csvContent": "Date,Deploys\nJun 11,2\nJun 12,0\nJun 13,0\nJun 14,0\nJun 15,0\nJun 16,0\nJun 17,4",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
