@@ -1,4 +1,4 @@
-# Deploy: 2026-06-17 — HiveMQ username fix (mtalibani)
+# Deploy: 2026-06-17 — Grafana dashboard + HiveMQ fix
 services:
   db:
     image: postgres:16-alpine
